@@ -35,20 +35,42 @@ move it to the left, but it modifies your CHIRP installation (see the script).
 
 ## Installation
 
-Save `radtel_rt950pro.py` in a fixed place, e.g. `~/radio/`, and start CHIRP
-with it. Developer mode is not needed:
+Developer mode is not needed for either option.
+
+### Option 1 — Load from the CHIRP issue (any platform)
+
+The driver is attached to
+[CHIRP issue #12180](https://chirpmyradio.com/issues/12180).
+
+1. In CHIRP: **Help → Load module from issue…**
+2. Enter issue number **12180**.
+3. Pick the newest `radtel_rt950pro.py` from the list.
+4. CHIRP warns that the author is not a recognised CHIRP developer; choose
+   **Yes** to load it anyway.
+
+The module is only loaded for the current CHIRP session: repeat this each time
+you start CHIRP. CHIRP only offers this while the issue is open.
+
+### Option 2 — Copy into CHIRP's driver directory (Linux/macOS, pipx)
+
+CHIRP loads every driver file in its `drivers` directory at start-up, so after
+copying the RT-950 Pro simply appears in the radio list:
 
 ```
-chirp --module ~/radio/radtel_rt950pro.py
+cp radtel_rt950pro.py ~/.local/share/pipx/venvs/chirp/lib/python3.*/site-packages/chirp/drivers/
 ```
 
-Optionally make that the default with an alias in `~/.bashrc`:
+> **After a CHIRP update the driver may be gone.** The file is not part of
+> CHIRP's package: a reinstall, or an update that moves CHIRP to a new Python
+> version, removes it. Check after every update and copy it again if needed.
+> Remove the file once CHIRP ships its own RT-950 Pro driver.
 
-```
-alias chirp='chirp --module ~/radio/radtel_rt950pro.py'
-```
+This does not work with the Windows installer build of CHIRP, which does not
+scan the driver directory; use option 1 there.
 
-Then: *Radio → Download from radio*, vendor **Radtel**, model **RT-950 Pro**.
+### Then
+
+*Radio → Download from radio*, vendor **Radtel**, model **RT-950 Pro**.
 
 ## Safety measures in the driver
 
