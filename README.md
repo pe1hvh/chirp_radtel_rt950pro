@@ -33,6 +33,18 @@ under **Settings → Zone Names** (max. 10 characters).
 CHIRP places this list of tabs on the right. `tools/chirp_list_left.py` can
 move it to the left, but it modifies your CHIRP installation (see the script).
 
+## ⚠ Before you write: firmware and backup
+
+- This driver supports firmware with **990 channels (10 zones × 99)**, introduced
+  with vendor CPS v1.2.1 (2025-11-29). Older firmware used 960 channels
+  (15 zones × 64). Check *Menu → About* and update the radio first.
+- On 960-channel firmware the channel memory ends at 0x77FF. NeonPlug reported
+  calibration-like data at 0x7800–0x7FFF on one radio. Writing 990 channels
+  would overwrite 0x7800–0x7BBF. This has not been verified independently.
+- **Always download from the radio first and save the .img as a backup**
+  before uploading anything. Keep that file: it is the only way to restore
+  the radio if something goes wrong.
+
 ## Installation
 
 Developer mode is not needed for either option.
