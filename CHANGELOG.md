@@ -13,7 +13,7 @@ CPS RT-950_CPS v1.3.3.
 - Zone names at `0xC000` (10 × 16 bytes): read, shown as tab names, editable
   under Settings → Zone Names, written back.
 - APRS write with command `0x58` (was `0x55`, which the radio does not ACK),
-  only when APRS settings changed; 30 s ACK time-out.
+  confirmed on hardware; only when APRS settings changed; 30 s ACK time-out.
 - Per-block ACK time-outs and pauses for flash commits.
 - Error messages name the command and address of a failed block.
 - Raw memory view for CHIRP's developer-mode Browser tab.

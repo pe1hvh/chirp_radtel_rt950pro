@@ -13,16 +13,16 @@ support for the radio's **10 zones × 99 channels**, including zone names.
 | 990 channels (10 zones × 99) | ✅ | ✅ |
 | Zone names | ✅ | ✅ |
 | VFO, function, DTMF, modulation settings | ✅ | ✅ |
-| APRS settings | ✅ | ⚠️ via cmd `0x58`, see below |
+| APRS settings | ✅ | ✅ |
 
 Tested on hardware: Radtel RT-950 Pro, firmware **0.29** (10 × 99 zones),
 cross-checked against the vendor CPS **RT-950_CPS v1.3.3**.
 Zones were introduced in firmware 0.24; older 960-channel firmware is not
 supported for writing channels 961–990.
 
-APRS writes use command `0x58` as reported by NeonPlug; `0x55` (used by earlier
-drivers) gets no acknowledgement. The APRS block is only written when you
-change an APRS setting.
+APRS writes use command `0x58` (confirmed on hardware, first reported by
+NeonPlug); `0x55`, used by earlier drivers, gets no acknowledgement. The APRS
+block is only written when you change an APRS setting.
 
 ## What it looks like in CHIRP
 

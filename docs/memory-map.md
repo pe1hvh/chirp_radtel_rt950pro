@@ -52,8 +52,8 @@ The maximum length accepted by the radio has not been tested.
 
 | Range | Size | Content | Status |
 |---|---|---|---|
-| `0x0000–0x007F` | 0x80 | APRS settings; custom message at offset 79 (40 bytes, NUL-padded by the CPS) | read: HW |
+| `0x0000–0x007F` | 0x80 | APRS settings; custom message at offset 79 (40 bytes, NUL-padded by the CPS) | read and write: HW |
 
-Writing with `0x55` gets no ACK on the test radio (HW). NeonPlug writes with
-`0x58` and reports the radio accepts it (ext); the driver uses `0x58` and only
-writes this block when APRS settings were changed.
+Writing with `0x58` works: written and read back on the test radio (HW),
+first reported by NeonPlug. Writing with `0x55` gets no ACK (HW). The driver
+only writes this block when APRS settings were changed.
