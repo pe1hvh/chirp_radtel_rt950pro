@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.1.2 — 2026-10-18
+
+Documentation only. The driver's code is unchanged: an AST comparison with
+all docstrings removed shows no difference, and the tests pass.
+
+### Added
+- Every documented object has a meaningful docstring: all classes,
+  functions, methods, fields, instance attributes and constants, public and
+  private, with every parameter, return value and yield described (377
+  objects). The 23 instance attributes that had none now have one.
+- Two independent reviews checked all docstrings against the code; their
+  51 findings were corrected or completed (see Fixed).
+- `docs/build.py`: builds the documentation grouped by driver layer and
+  section, taken from the banner comments in the source; private objects
+  are documented as well.
+- New pdoc template (`docs/templates/module.html.jinja2`):
+  - side menu "Driver layers" with layers 1-6, their sections, and per
+    class Constructor, Fields, Properties and Methods;
+  - public objects first with an open lock, private ones after a dashed
+    line with a closed lock; yellow locks for methods and functions,
+    orange for classes, properties, fields and constants; a legend;
+  - item counts per layer and section, with a breakdown on hover;
+  - "Expand all", "Collapse all" and "Hide private" buttons; the menu
+    opens and highlights the entry of the current anchor;
+  - a heading with a one-line description per layer on the page.
+- The docs workflow checks docstrings (pydocstyle, pydoclint) before
+  building and stops on a missing parameter, return value or yield.
+
+### Changed
+- Workflow builds with `python docs/build.py`; pdoc pinned to 16.x.
+- README: documentation section describes menu, locks and local build.
+- `.gitignore`: `site/`, `doclint.txt`.
+
+### Fixed
+- Docstrings that did not match the code, among others: the module
+  docstring's read-modify-write and 0x7BC0-0x7FFF claims, `LOG`,
+  `_encode_name`, `encode_vfo_section`, `encode_function_section`,
+  `encode_dtmf_section`, `encode_aprs_section`, `parse_aprs_section`,
+  `_build_write_plan`, `RT950ProRadio._memsize`, `set_memory`, `sync_in`,
+  `_build_vfo_group`, `_update_tones_from_memory`, `get_dtmf_code_group`.
+- Literal `::` after "Memory layout" and "Byte layout" in the rendered page.
+- Example zone names in docstrings are neutral.
+
+### Known issues (found in the review, documented in the code, not fixed)
+- VFO power is always decoded as HIGH (`parse_vfo_section`); editing any
+  other VFO field writes High power back.
+- `encode_modulation_sections` turns unset (0xFF) fields into 0x00 without
+  any edit (144 bytes for an all-0xFF block); the block is part of every
+  upload.
+- `set_memory` modifies CHIRP's (frozen) memory object for a DTCS memory
+  with TX code 0.
+- Range/mask mismatches: `key_side1/2_short/long` (0-31 allowed, 4 bits
+  stored), APRS `timed_beacon_time` (0-60) and `radio_symbol` (0-99) (4 bits
+  stored); channel encryption 3 offered in CHIRP but reset to 0.
+- `encode_aprs_section` normalises out-of-range stored values; an edited
+  channel record loses the high nibbles of bytes 12-13.
+
 ## 0.1.1 — 2026-10-18
 
 Code quality and documentation. Channel, settings and clone behaviour are

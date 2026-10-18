@@ -17,10 +17,10 @@ handheld over its USB programming cable. It targets firmware with
 990 channels in 10 zones of 99 channels (vendor CPS v1.2.1 and later,
 firmware 0.24 and later).
 
-Memory layout (confirmed on hardware)::
+Memory layout (confirmed on hardware):
 
     0x0000-0x7BBF  990 channels x 32 bytes = 10 zones x 99 channels
-    0x7BC0-0x7FFF  unused; kept verbatim and written back unchanged
+    0x7BC0-0x7FFF  unused; kept verbatim in the image, never written to the radio
     0x8000         VFO A/B/C            (0x100 bytes, 96 used)
     0x9000         function settings    (0x100 bytes, 96 used)
     0xA000         DTMF settings        (0x200 bytes, 384 used)
@@ -29,7 +29,9 @@ Memory layout (confirmed on hardware)::
     0xD000         modulation names     (0x300 bytes)
     APRS           separate space: read command 0x54, write command 0x58
 
-Zone *z*, channel *k* (both 1-based) is stored in slot ``(z - 1) * 99 + k``.
+Zone *z*, channel *k* (both 1-based) is 1-based slot ``(z - 1) * 99 + k``,
+i.e. ``RadioImage.channels[(z - 1) * 99 + k - 1]`` at byte address
+``((z - 1) * 99 + k - 1) * 32``.
 
 The module is organised in layers, from raw bytes up to CHIRP:
 
@@ -44,8 +46,14 @@ The module is organised in layers, from raw bytes up to CHIRP:
 6. CHIRP integration: :class:`RT950ProRadio` and one
    :class:`RT950ProZoneRadio` sub-device per zone.
 
-Every encoder works read-modify-write: bytes the driver does not
-understand are preserved exactly as read from the radio.
+Unedited channel records and VFO entries are written back byte-identical.
+Settings encoders work read-modify-write on the stored bytes and replace
+only the bits of known fields, but a field byte holding 0xFF is treated
+as 0 before its fields are merged, and some encoders normalise or rewrite
+bytes even without an edit (see the Warning sections of
+:func:`encode_modulation_sections` and :func:`encode_aprs_section`). An
+edited channel record is rebuilt from scratch (see
+:meth:`ChannelRecord.to_bytes`).
 
 See ``docs/memory-map.md`` and ``docs/protocol.md`` in the repository for
 the byte-level reference.
@@ -151,8 +159,10 @@ LOG = logging.getLogger(__name__ + ".channel")
 """Module logger.
 
 Note: ``LOG`` is rebound to ``logging.getLogger(__name__)`` in section 6.
-Functions look ``LOG`` up at call time, so at run time every function in
-this module logs through that final driver logger.
+Functions look ``LOG`` up at call time, so code that uses ``LOG`` directly
+logs through that final driver logger. Code that takes a ``logger``
+argument uses the logger passed in (``RadioImage`` defaults to
+``CHANNEL_LOG``, the transport to ``__name__ + ".transport"``).
 """
 
 _DCS_CODES = [
@@ -376,17 +386,14 @@ inverted (``I``).
 
 
 class ToneMode(Enum):
-    """Kind of sub-audio tone used by a channel for transmit or receive.
-
-    Attributes:
-        OFF: No tone; carrier squelch.
-        CTCSS: Analog sub-audio tone (``ctcss_hz``).
-        DCS: Digital coded squelch (``dcs_code`` and ``dcs_polarity``).
-    """
+    """Kind of sub-audio tone used by a channel for transmit or receive."""
 
     OFF = "off"
+    """No tone; carrier squelch."""
     CTCSS = "ctcss"
+    """Analog sub-audio tone (``ctcss_hz``)."""
     DCS = "dcs"
+    """Digital coded squelch (``dcs_code`` and ``dcs_polarity``)."""
 
 
 @dataclass(slots=True)
@@ -402,22 +409,28 @@ class ToneSetting:
     An instance remembers the bytes it was decoded from. As long as the
     tone is not changed, :meth:`to_bytes` returns those original bytes, so
     unknown encodings survive a read/write cycle unchanged.
-
-    Attributes:
-        mode: Tone kind.
-        ctcss_hz: CTCSS frequency in Hz when ``mode`` is CTCSS.
-        dcs_code: DCS code as an octal-looking integer (e.g. ``23`` for
-            D023) when ``mode`` is DCS.
-        dcs_polarity: ``"N"`` (normal) or ``"I"`` (inverted) for DCS.
     """
 
     mode: ToneMode
+    """Tone kind."""
     ctcss_hz: Optional[float] = None
+    """CTCSS frequency in Hz when ``mode`` is CTCSS."""
     dcs_code: Optional[int] = None
+    """DCS code as an octal-looking integer (e.g. ``23`` for D023) when
+    ``mode`` is DCS.
+    """
     dcs_polarity: Optional[str] = None
+    """``"N"`` (normal) or ``"I"`` (inverted) for DCS."""
     _raw_bytes: bytes = field(default=b"", repr=False, compare=False)
+    """The two bytes this tone was decoded from (empty for a new tone).
+    Returned unchanged by :meth:`to_bytes` while the tone is not edited.
+    """
     _original_state: Optional[tuple] = field(
         default=None, repr=False, compare=False)
+    """``(mode, ctcss_hz, dcs_code, dcs_polarity)`` when the tone was
+    created or last encoded; compared with the current state to detect an
+    edit.
+    """
 
     def __post_init__(self) -> None:
         """Snapshot the initial state for change tracking."""
@@ -495,14 +508,17 @@ class ToneSetting:
     def to_bytes(self) -> bytes:
         """Encode the tone into the radio's two-byte format.
 
-        Unchanged tones return the bytes they were decoded from.
+        Unchanged tones return the bytes they were decoded from. A DCS or
+        CTCSS tone without a code, polarity or frequency encodes as ``00 00``
+        (no tone). After encoding, the new bytes become the reference for
+        the next change check.
 
         Returns:
             bytes: Two bytes as stored in a channel or VFO record.
 
         Raises:
             ValueError: If the DCS code is not in ``_DCS_CODES`` or the
-                CTCSS value does not fit in 16 bits.
+                CTCSS value is not within 0.1-6553.5 Hz.
         """
         current_state = self._state_tuple()
         if (
@@ -577,48 +593,40 @@ class ToneSetting:
         return setting
 
 class PowerLevel(Enum):
-    """Transmit power as stored in the low nibble of channel byte 14.
-
-    Attributes:
-        HIGH: 0, high power.
-        MEDIUM: 1, medium power.
-        LOW: 2, low power.
-    """
+    """Transmit power as stored in the low nibble of channel byte 14."""
 
     HIGH = 0
+    """High power (stored value 0)."""
     MEDIUM = 1
+    """Medium power (stored value 1)."""
     LOW = 2
+    """Low power (stored value 2)."""
 
 class Bandwidth(Enum):
     """FM channel bandwidth (bit 6 of the channel flags byte).
-
-    Attributes:
-        NARROW: 0 in this enum; stored as bit 6 = 1 (12.5 kHz).
-        WIDE: 1 in this enum; stored as bit 6 = 0 (25 kHz).
 
     Note:
         The enum values do not equal the stored bit; the codecs translate.
     """
 
     NARROW = 0
+    """Narrow FM, 12.5 kHz; stored as bit 6 = 1."""
     WIDE = 1
+    """Wide FM, 25 kHz; stored as bit 6 = 0."""
 
 class Modulation(Enum):
-    """Receive modulation (bit 0 of the channel flags byte).
-
-    Attributes:
-        FM: 0, frequency modulation.
-        AM: 1, amplitude modulation (e.g. airband).
-    """
+    """Receive modulation (bit 0 of the channel flags byte)."""
 
     FM = 0
+    """Frequency modulation; stored as bit 0 = 0."""
     AM = 1
+    """Amplitude modulation, e.g. airband; stored as bit 0 = 1."""
 
 @dataclass(slots=True)
 class ChannelRecord:
     """One 32-byte memory channel.
 
-    Byte layout::
+    Byte layout:
 
         0-3    RX frequency, packed BCD, 10 Hz units, little-endian
         4-7    TX frequency, same format
@@ -633,50 +641,58 @@ class ChannelRecord:
         20-31  name, GB2312, padded with 0xFF
 
     An unchanged record serialises to exactly the bytes it was read from.
-
-    Attributes:
-        rx_hz: Receive frequency in Hz, or ``None`` for an empty slot.
-        tx_hz: Transmit frequency in Hz, or ``None``.
-        rx_tone: Receive (decode) tone.
-        tx_tone: Transmit (encode) tone.
-        signalling_group: DTMF signalling group, 0-15.
-        ptt_id: PTT ID mode, 0-15.
-        power: Transmit power.
-        scrambler: Scrambler code, 0-15 (0 = off).
-        learn_fhss: Learn-FHSS flag.
-        bandwidth: FM bandwidth.
-        encryption: Encryption mode, 0-3 (0 = off).
-        busy_lockout: Busy-channel lockout.
-        scan_add: ``True`` if the channel is included in scanning.
-        tx_enabled: TX-enable flag as stored by the radio.
-        rx_modulation: Receive modulation.
-        fhss_code: Six hex digits, or ``None``.
-        name: Channel name, up to 12 bytes in GB2312.
     """
 
     rx_hz: Optional[int]
+    """Receive frequency in Hz, or ``None`` for an empty slot."""
     tx_hz: Optional[int]
+    """Transmit frequency in Hz, or ``None``."""
     rx_tone: ToneSetting
+    """Receive (decode) tone."""
     tx_tone: ToneSetting
+    """Transmit (encode) tone."""
     signalling_group: int
+    """DTMF signalling group, 0-15."""
     ptt_id: int
+    """PTT ID mode, 0-15."""
     power: PowerLevel
+    """Transmit power."""
     scrambler: int
+    """Scrambler code, 0-15 (0 = off)."""
     learn_fhss: bool
+    """Learn-FHSS flag."""
     bandwidth: Bandwidth
+    """FM bandwidth."""
     encryption: int
+    """Encryption mode, 0-3 (0 = off)."""
     busy_lockout: bool
+    """Busy-channel lockout."""
     scan_add: bool
+    """``True`` if the channel is included in scanning."""
     tx_enabled: bool
+    """TX-enable flag as stored by the radio."""
     rx_modulation: Modulation
+    """Receive modulation."""
     fhss_code: Optional[str]
+    """Six hex digits, or ``None``."""
     name: str
+    """Channel name, up to 12 bytes in GB2312."""
     _raw_bytes: bytes = field(default=b"", repr=False, compare=False)
+    """The 32 bytes this record was decoded from (empty for a new record).
+    Returned unchanged by :meth:`to_bytes` while the record is not edited,
+    so unknown bits survive a read/write cycle.
+    """
     _original_state: Optional[tuple] = field(default=None, repr=False, compare=False)
+    """Result of ``_state_tuple()`` when the record was decoded or last
+    encoded, or ``None`` for a new record; used to detect an edit.
+    """
 
     @classmethod
     def from_bytes(cls, data: bytes, *, logger: Optional[logging.Logger] = None) -> "ChannelRecord":
         """Parse a raw 32-byte channel record.
+
+        A power nibble above 2 is decoded as LOW; the raw bytes are kept, so
+        they are written back unchanged unless the record is edited.
 
         Args:
             data: Exactly 32 bytes from the channel area.
@@ -738,7 +754,10 @@ class ChannelRecord:
 
         An unchanged record returns its original bytes. A changed record is
         rebuilt from scratch; the new bytes then become the reference for the
-        next change check.
+        next change check. Rebuilding keeps only the known fields: bytes 12
+        and 13 keep only their low nibble (high nibble 0), the FHSS field
+        becomes 0xFF x 4 when no code is set, and the name is padded with
+        0xFF.
 
         Args:
             logger: Logger for name-encoding warnings; defaults to ``LOG``.
@@ -958,9 +977,12 @@ def _decode_name(raw: bytes, logger: logging.Logger) -> str:
 def _encode_name(name: str, logger: logging.Logger) -> bytes:
     """Encode a channel name into the 12-byte GB2312 field.
 
-    Characters that GB2312 cannot represent are first reduced to ASCII via
-    Unicode normalisation; anything still unencodable is dropped. Names
-    longer than 12 bytes are truncated. Every change is logged.
+    If the name cannot be encoded as GB2312, the whole name is
+    NFKD-normalised and reduced to its ASCII characters (all non-ASCII
+    characters, including valid GB2312 ones, are dropped); if nothing ASCII
+    remains, the GB2312-encodable characters are kept instead. Characters
+    that still cannot be encoded are dropped, and the result is truncated to
+    12 bytes without splitting a character. Every change is logged.
 
     Args:
         name: Channel name.
@@ -1021,7 +1043,7 @@ _DTMF_DIGITS = "0123456789ABCD*#"
 class VFOSettings:
     """One 32-byte VFO entry (VFO A, B or C) from the block at 0x8000.
 
-    Byte layout::
+    Byte layout:
 
         0-7    RX frequency, one decimal digit per byte, 10 Hz units
         8-9    RX tone
@@ -1034,43 +1056,54 @@ class VFOSettings:
         19     step index (low nibble)
         20-26  offset, one decimal digit per byte, 100 Hz units
 
-    Bits and bytes not listed are preserved when encoding.
-
-    Attributes:
-        rx_hz: Receive frequency in Hz, or ``None``.
-        offset_hz: Repeater offset in Hz, or ``None``.
-        rx_tone: Receive tone.
-        tx_tone: Transmit tone.
-        busy_lockout: Busy-channel lockout.
-        offset_direction: 0 simplex, 1 plus, 2 minus, 3 split.
-        signalling_group: DTMF signalling group, 0-15.
-        tx_power: Transmit power.
-        scrambler: Scrambler code, 0-15.
-        learn_fhss: Learn-FHSS flag.
-        bandwidth: FM bandwidth.
-        encryption: Encryption mode, 0-3.
-        rx_modulation: Receive modulation.
-        freq_band: Band index (see ``_VFO_BAND_CHOICES``).
-        step_freq_index: Step index (see ``_VFO_STEP_CHOICES``).
+    Bits and bytes not listed are preserved when encoding, except that a
+    listed byte holding 0xFF is treated as 0 before its fields are written.
     """
 
     rx_hz: Optional[int]
+    """Receive frequency in Hz, or ``None``."""
     offset_hz: Optional[int]
+    """Repeater offset in Hz, or ``None``."""
     rx_tone: ToneSetting
+    """Receive tone."""
     tx_tone: ToneSetting
+    """Transmit tone."""
     busy_lockout: bool
+    """Busy-channel lockout."""
     offset_direction: int
+    """0 simplex, 1 plus, 2 minus, 3 split."""
     signalling_group: int
+    """DTMF signalling group, 0-15."""
     tx_power: PowerLevel
+    """Transmit power.
+
+    Warning:
+        Known issue: currently always decoded as HIGH (see
+        :func:`parse_vfo_section`).
+    """
     scrambler: int
+    """Scrambler code, 0-15."""
     learn_fhss: bool
+    """Learn-FHSS flag."""
     bandwidth: Bandwidth
+    """FM bandwidth."""
     encryption: int
+    """Encryption mode, 0-3."""
     rx_modulation: Modulation
+    """Receive modulation."""
     freq_band: int
+    """Band index (see ``_VFO_BAND_CHOICES``)."""
     step_freq_index: int
+    """Step index (see ``_VFO_STEP_CHOICES``)."""
     _raw_bytes: bytes = field(default=b"", repr=False, compare=False)
+    """The 32-byte VFO entry this object was decoded from (empty when new).
+    Written back unchanged by :func:`encode_vfo_section` while the entry
+    is not edited.
+    """
     _original_state: Optional[tuple] = field(default=None, repr=False, compare=False)
+    """Result of ``_state_tuple()`` when the entry was decoded or last
+    encoded, or ``None`` when new; used to detect an edit.
+    """
 
     def _state_tuple(self) -> tuple:
         """Return all user-visible fields as a tuple for change detection.
@@ -1103,87 +1136,79 @@ class FunctionSettings:
 
     Values are kept in a flat dictionary keyed by the names used in
     ``_FUNCTION_SPECS`` (e.g. ``"sql"``, ``"tot"``, ``"key1_long"``).
-
-    Attributes:
-        values: Setting name to raw integer value; ``None`` means the byte
-            was 0xFF (not set).
     """
 
     values: Dict[str, Optional[int]] = field(default_factory=dict)
+    """Setting name to raw integer value; ``None`` means the byte was 0xFF (not
+    set).
+    """
 
 @dataclass(slots=True)
 class DTMFSettings:
     """DTMF settings from the 384-byte block at 0xA000.
 
     Layout: a 32-byte info part followed by 22 code groups of 16 bytes.
-
-    Attributes:
-        current_id: Own DTMF ID, up to 5 symbols.
-        ptt_id_mode: PTT ID mode 0-3 (off, BOT, EOT, both), or ``None``.
-        last_time_send: Raw "last time send" value, or ``None``.
-        last_time_stop: Raw "last time stop" value, or ``None``.
-        code_groups: The 22 code groups, up to 6 symbols each.
     """
 
     current_id: str
+    """Own DTMF ID, up to 5 symbols."""
     ptt_id_mode: Optional[int]
+    """PTT ID mode 0-3 (off, BOT, EOT, both), or ``None``."""
     last_time_send: Optional[int]
+    """Raw "last time send" value, or ``None``."""
     last_time_stop: Optional[int]
+    """Raw "last time stop" value, or ``None``."""
     code_groups: List[str]
+    """The 22 code groups, up to 6 symbols each."""
 
 @dataclass(slots=True)
 class ModulationChannelEntry:
     """One of the 16 broadcast/SSB memory entries of the modulation screen.
 
     Each entry holds an FM, an AM and an SSB memory side by side.
-
-    Attributes:
-        fm_frequency: FM broadcast frequency in Hz, or ``None``.
-        fm_name: FM memory name.
-        am_frequency: AM broadcast frequency in Hz, or ``None``.
-        am_name: AM memory name.
-        ssb_frequency: SSB frequency in Hz, or ``None``.
-        ssb_bandwidth: Raw SSB bandwidth index, or ``None``.
-        ssb_beat_offset: SSB BFO offset (signed), or ``None``.
-        ssb_name: SSB memory name.
     """
 
     fm_frequency: Optional[int]
+    """FM broadcast frequency in Hz (stored in 10 kHz units), or ``None``."""
     fm_name: str
+    """FM memory name."""
     am_frequency: Optional[int]
+    """AM broadcast frequency in Hz (stored in 10 kHz units), or ``None``."""
     am_name: str
+    """AM memory name."""
     ssb_frequency: Optional[int]
+    """SSB frequency in Hz (stored in 10 kHz units), or ``None``."""
     ssb_bandwidth: Optional[int]
+    """Raw SSB bandwidth index, or ``None``."""
     ssb_beat_offset: Optional[int]
+    """SSB BFO offset (signed), or ``None``."""
     ssb_name: str
+    """SSB memory name."""
 
 @dataclass(slots=True)
 class ModulationSettings:
-    """Contents of the modulation blocks (parameters at 0xB000, names at 0xD000).
-
-    Attributes:
-        fm_current_channel: Selected FM memory, 0-14, or ``None``.
-        am_current_channel: Selected AM memory, 0-14, or ``None``.
-        ssb_current_channel: Selected SSB memory, 0-14, or ``None``.
-        work_mode: Work mode, 0-1, or ``None``.
-        modulation_mode: Modulation mode, 0-4, or ``None``.
-        am_step_index: AM step index, 0-3, or ``None``.
-        am_rx_gain: AM RX gain, 0-36, or ``None``.
-        ssb_step_index: SSB step index, 0-5, or ``None``.
-        ssb_rx_gain: SSB RX gain, 0-36, or ``None``.
-        channels: The 16 :class:`ModulationChannelEntry` items.
-    """
+    """Contents of the modulation blocks (parameters at 0xB000, names at 0xD000)."""
 
     fm_current_channel: Optional[int]
+    """Selected FM memory, 0-14, or ``None``."""
     am_current_channel: Optional[int]
+    """Selected AM memory, 0-14, or ``None``."""
     ssb_current_channel: Optional[int]
+    """Selected SSB memory, 0-14, or ``None``."""
     work_mode: Optional[int]
+    """Work mode, 0-1, or ``None``."""
     modulation_mode: Optional[int]
+    """Modulation mode, 0-4, or ``None``."""
     am_step_index: Optional[int]
+    """AM step index, 0-3, or ``None``."""
     am_rx_gain: Optional[int]
+    """AM RX gain, 0-36, or ``None``."""
     ssb_step_index: Optional[int]
+    """SSB step index, 0-5, or ``None``."""
     ssb_rx_gain: Optional[int]
+    """SSB RX gain, 0-36, or ``None``."""
     channels: List[ModulationChannelEntry]
+    """The 16 :class:`ModulationChannelEntry` items."""
 
 @dataclass(slots=True)
 class APRSSettings:
@@ -1191,12 +1216,10 @@ class APRSSettings:
 
     Values are kept in a flat dictionary keyed by the names used in
     ``_APRS_SPECS`` (e.g. ``"call_sign"``, ``"ssid"``, ``"altitude"``).
-
-    Attributes:
-        fields: Setting name to value (int or str); ``None`` means not set.
     """
 
     fields: Dict[str, Optional[object]] = field(default_factory=dict)
+    """Setting name to value (int or str); ``None`` means not set."""
 
 def parse_vfo_section(section: bytes) -> List[VFOSettings]:
     """Decode the VFO block into VFO entries.
@@ -1211,6 +1234,12 @@ def parse_vfo_section(section: bytes) -> List[VFOSettings]:
 
     Raises:
         ValueError: If the length is not a multiple of 32.
+
+    Warning:
+        Known issue: the power nibble (byte 16) is decoded with
+        ``min(raw, PowerLevel.HIGH.value)``, which is always 0, so every
+        entry decodes as HIGH. Editing any other field of a VFO then writes
+        HIGH (0) back to byte 16, changing Medium/Low power to High.
     """
     if len(section) % 32 != 0:
         raise ValueError("VFO section must be a multiple of 32 bytes")
@@ -1260,7 +1289,9 @@ def parse_function_section(section: bytes) -> FunctionSettings:
     """Decode the 96-byte function block.
 
     The block is read as three 32-byte parts; each known byte is mapped to
-    a named setting (see the ``_set`` calls for the offsets).
+    a named setting (see the ``_set`` calls for the offsets). Each value is
+    the low nibble of its byte (5 bits for ``key*_long``); byte 26 holds
+    ``work_mode_a/b/c`` in bits 1-0, 3-2 and 5-4.
 
     Args:
         section: Exactly 96 bytes.
@@ -1279,13 +1310,29 @@ def parse_function_section(section: bytes) -> FunctionSettings:
     values: Dict[str, Optional[int]] = {}
 
     def _masked(byte: int, mask: int = 0x0F, shift: int = 0) -> Optional[int]:
-        """Extract a bit field from one byte; 0xFF (not set) gives ``None``."""
+        """Extract a bit field from one byte; 0xFF (not set) gives ``None``.
+
+        Args:
+            byte: Raw byte value from the function block.
+            mask: Bit mask applied after shifting (default ``0x0F``).
+            shift: Number of bits to shift right before masking.
+
+        Returns:
+            Optional[int]: ``(byte >> shift) & mask``, or ``None`` if ``byte`` is 0xFF.
+        """
         if byte == 0xFF:
             return None
         return (byte >> shift) & mask
 
     def _set(name: str, byte: int, mask: int = 0x0F, shift: int = 0) -> None:
-        """Store the masked value of ``byte`` under ``name``."""
+        """Store the masked value of ``byte`` under ``name``.
+
+        Args:
+            name: Setting key in the ``values`` dictionary.
+            byte: Raw byte value from the function block.
+            mask: Bit mask passed to ``_masked`` (default ``0x0F``).
+            shift: Right shift passed to ``_masked``.
+        """
         values[name] = _masked(byte, mask, shift)
 
     _set("sql", part1[0])
@@ -1390,7 +1437,7 @@ def parse_dtmf_section(section: bytes) -> DTMFSettings:
 def parse_modulation_sections(mod_block: bytes, name_block: bytes) -> ModulationSettings:
     """Decode the modulation parameter and name blocks.
 
-    Parameter block layout (offsets in bytes)::
+    Parameter block layout (offsets in bytes):
 
         0-31     16 FM frequencies, LE uint16, 10 kHz units
         32       FM current channel     33  work mode
@@ -1421,7 +1468,15 @@ def parse_modulation_sections(mod_block: bytes, name_block: bytes) -> Modulation
     channels: List[ModulationChannelEntry] = []
 
     def _optional(value: int, modulus: int) -> Optional[int]:
-        """Return ``value % modulus``, or ``None`` for 0xFF (not set)."""
+        """Return ``value % modulus``, or ``None`` for 0xFF (not set).
+
+        Args:
+            value: Raw byte value from the modulation parameter block.
+            modulus: Number of valid values; the result is wrapped into ``0..modulus-1``.
+
+        Returns:
+            Optional[int]: ``value % modulus``, or ``None`` if ``value`` is 0xFF.
+        """
         if value == 0xFF:
             return None
         return value % modulus
@@ -1451,7 +1506,14 @@ def parse_modulation_sections(mod_block: bytes, name_block: bytes) -> Modulation
     ssb_names = [_decode_gb2312(name_block, 512 + idx * 16) for idx in range(16)]
 
     def _scale_freq(value: int) -> Optional[int]:
-        """Convert a stored 10 kHz-unit value to Hz; 0 and 0xFFFF mean empty."""
+        """Convert a stored 10 kHz-unit value to Hz; 0 and 0xFFFF mean empty.
+
+        Args:
+            value: Stored LE uint16 frequency in 10 kHz units.
+
+        Returns:
+            Optional[int]: Frequency in Hz, or ``None`` for 0 or 0xFFFF.
+        """
         if value in (0, 0xFFFF):
             return None
         return value * 10_000
@@ -1491,10 +1553,14 @@ def parse_modulation_sections(mod_block: bytes, name_block: bytes) -> Modulation
 def parse_aprs_section(section: bytes) -> APRSSettings:
     """Decode the 128-byte APRS block.
 
-    Position is stored as degrees/minutes/seconds bytes with ``N``/``S``
-    and ``W``/``E`` as ASCII letters; altitude is a little-endian signed
-    16-bit value clamped to +/-10000. Text fields are ASCII (call sign,
-    routes) or GB2312 (custom message).
+    Latitude is stored at bytes 7-10 (N/S letter, minute, degree, second)
+    and longitude at bytes 11-14 (W/E letter, minute, degree, second).
+    ``north_south``/``east_west`` decode ``N``/``W`` as 0 and any other byte
+    as 1. Minutes and seconds are clamped to 59, degrees to 90/180.
+    Altitude (bytes 15-16) is a little-endian signed 16-bit value clamped to
+    +/-10000. Single-byte settings keep their low nibble (byte 6: 5 bits,
+    byte 27: 7 bits). Text fields are ASCII (call sign, routes) or GB2312
+    (custom message).
 
     Args:
         section: Exactly 128 bytes.
@@ -1511,7 +1577,13 @@ def parse_aprs_section(section: bytes) -> APRSSettings:
     fields: Dict[str, Optional[object]] = {}
 
     def _set(name: str, idx: int, mask: int = 0x0F) -> None:
-        """Store the masked byte at ``idx`` under ``name``; 0xFF gives ``None``."""
+        """Store the masked byte at ``idx`` under ``name``; 0xFF gives ``None``.
+
+        Args:
+            name: Field key in the ``fields`` dictionary.
+            idx: Byte offset within the 128-byte APRS block.
+            mask: Bit mask applied to the byte (default ``0x0F``).
+        """
         byte = data[idx]
         if byte == 0xFF:
             fields[name] = None
@@ -1585,7 +1657,11 @@ def encode_vfo_section(vfos: Optional[List[VFOSettings]], raw: Optional[bytes]) 
     """Encode VFO entries into the 96-byte VFO block.
 
     Unchanged entries are copied back verbatim. Changed entries are written
-    over their previous bytes, so bits the driver does not know survive.
+    over their previous bytes, so bits the driver does not know survive,
+    except that a field byte holding 0xFF is treated as 0 first.
+    ``rx_hz`` or ``offset_hz`` of ``None`` keeps the stored digits. Entries
+    beyond the third are ignored. Each re-encoded entry's change-tracking
+    snapshot is updated to the new bytes.
 
     Args:
         vfos: Up to three entries; ``None`` or empty leaves ``raw`` as is.
@@ -1654,7 +1730,10 @@ def encode_function_section(settings: Optional[FunctionSettings], raw: Optional[
     """Encode function settings into the 96-byte function block.
 
     Only the bits of each field are replaced; other bits in the same byte
-    are preserved. A value of ``None`` writes 0xFF.
+    are preserved, but a byte holding 0xFF is treated as 0 when merging
+    bits. A value of ``None``, or a key missing from ``settings.values``,
+    writes 0xFF over the whole byte. Byte 26 packs ``work_mode_a/b/c``
+    (bits 1-0, 3-2, 5-4); it becomes 0xFF if any of the three is ``None``.
 
     Args:
         settings: Settings to write; ``None`` leaves ``raw`` as is.
@@ -1675,7 +1754,18 @@ def encode_function_section(settings: Optional[FunctionSettings], raw: Optional[
     values = settings.values
 
     def _set(part: memoryview, index: int, key: str, mask: int = 0x0F, shift: int = 0) -> None:
-        """Write ``values[key]`` into ``part[index]`` under ``mask``/``shift``."""
+        """Write ``values[key]`` into ``part[index]`` under ``mask``/``shift``.
+
+        ``None`` writes 0xFF; otherwise bits outside ``mask << shift`` are kept,
+        except that a 0xFF byte is treated as 0.
+
+        Args:
+            part: 32-byte view of one third of the function block.
+            index: Byte offset within ``part`` (0-31).
+            key: Setting key in ``settings.values``.
+            mask: Bit mask of the field before shifting (default ``0x0F``).
+            shift: Bit position of the field within the byte.
+        """
         value = values.get(key)
         if value is None:
             part[index] = 0xFF
@@ -1759,7 +1849,10 @@ def encode_dtmf_section(settings: Optional[DTMFSettings], raw: Optional[bytes]) 
     """Encode DTMF settings into the 384-byte DTMF block.
 
     The own ID and code groups are rewritten only when their text changed,
-    so the radio's original padding bytes survive otherwise.
+    so the radio's original padding bytes survive otherwise. A rewritten
+    code group has bytes 6-15 set to 0xFF; groups missing from
+    ``settings.code_groups`` are encoded as empty. Info bytes 6-8 (PTT ID
+    mode, last-time send/stop) are always written to the low nibble.
 
     Args:
         settings: Settings to write; ``None`` leaves ``raw`` as is.
@@ -1782,7 +1875,12 @@ def encode_dtmf_section(settings: Optional[DTMFSettings], raw: Optional[bytes]) 
         info[0:5] = _encode_dtmf_sequence(settings.current_id, 5)
 
     def _write_mode(index: int, value: Optional[int]) -> None:
-        """Write a nibble value at info byte ``index``; ``None`` writes 0xFF."""
+        """Write a nibble value at info byte ``index``; ``None`` writes 0xFF.
+
+        Args:
+            index: Byte offset within the 32-byte DTMF info area (6, 7 or 8).
+            value: Value for the low nibble; the high nibble is kept unless 0xFF.
+        """
         if value is None:
             info[index] = 0xFF
         else:
@@ -1815,8 +1913,19 @@ def encode_modulation_sections(
 ) -> tuple[bytes, bytes]:
     """Encode modulation settings into the parameter and name blocks.
 
-    Fields are only rewritten when their value changed. Entries beyond
-    ``len(settings.channels)`` (up to 16) are cleared to 0xFF.
+    Frequency, bandwidth and beat-offset fields of entries
+    0..len(channels)-1 are rewritten when their encoded bytes differ; names
+    are rewritten only when their decoded text changed. Entries beyond
+    ``len(settings.channels)`` (up to 16) are cleared to 0xFF. Parameter
+    bytes 32, 33, 66-68 and 149-152 are written via ``_write_param``
+    (``None`` skips; 0 does not overwrite 0xFF).
+
+    Warning:
+        Known issue: parsing turns both 0 and 0xFFFF frequencies, and 0/0xFF
+        bandwidths, into ``None``; encoding writes ``None`` as 0x00. Unset
+        (0xFF) fields therefore become 0x00 even when nothing was edited: an
+        all-0xFF parameter block comes back with 144 bytes changed. The
+        parameter block is part of every upload.
 
     Args:
         settings: Settings to write; ``None`` leaves both blocks as is.
@@ -1839,7 +1948,15 @@ def encode_modulation_sections(
     channels = settings.channels[:16]
 
     def _encode_freq(value: Optional[int]) -> bytes:
-        """Convert Hz to a LE uint16 in 10 kHz units; ``None``/<=0 gives 0."""
+        """Convert Hz to a LE uint16 in 10 kHz units; ``None``/<=0 gives 0.
+
+        Args:
+            value: Frequency in Hz, or ``None``.
+
+        Returns:
+            bytes: Two bytes, LE uint16 of ``value / 10000`` rounded and clamped
+            to 0-0xFFFF.
+        """
         if value is None or value <= 0:
             return b'\x00\x00'
         scaled = max(0, min(0xFFFF, int(round(value / 10_000))))
@@ -1900,6 +2017,10 @@ def encode_modulation_sections(
         """Write a single parameter byte unless the value is ``None``.
 
         A value of 0 does not overwrite an unset (0xFF) byte.
+
+        Args:
+            index: Byte offset within the 256-byte modulation parameter block.
+            value: Value to store (masked to 8 bits), or ``None`` to skip.
         """
         if value is None:
             return
@@ -1923,8 +2044,16 @@ def encode_modulation_sections(
 def encode_aprs_section(settings: Optional[APRSSettings], raw: Optional[bytes]) -> bytes:
     """Encode APRS settings into the 128-byte APRS block.
 
-    Bytes are only changed when the value differs from what is stored, so
-    an unchanged block is written back byte-identical.
+    Masked fields and text fields are only changed when their value
+    differs. A block holding valid values is written back byte-identical.
+    A key missing from ``settings.fields`` writes 0xFF.
+
+    Warning:
+        Out-of-range stored values are normalised even without an edit:
+        N/S and W/E bytes other than ``N``/``W`` become ``S``/``E``,
+        minutes/seconds/degrees are clamped, and bit 7 of byte 27 is
+        cleared. The APRS block is only uploaded when its bytes differ from
+        the ones read (see ``RT950ProRadio._write_options``).
 
     Args:
         settings: Settings to write; ``None`` leaves ``raw`` as is.
@@ -1943,7 +2072,13 @@ def encode_aprs_section(settings: Optional[APRSSettings], raw: Optional[bytes]) 
     fields = settings.fields
 
     def _set(idx: int, key: str, mask: int = 0x0F) -> None:
-        """Write ``fields[key]`` at ``idx`` under ``mask``; ``None`` writes 0xFF."""
+        """Write ``fields[key]`` at ``idx`` under ``mask``; ``None`` writes 0xFF.
+
+        Args:
+            idx: Byte offset within the 128-byte APRS block.
+            key: Field key in ``settings.fields``.
+            mask: Bit mask of the field (default ``0x0F``).
+        """
         value = fields.get(key)
         current = data[idx]
         if value is None:
@@ -2060,7 +2195,8 @@ def _decode_vfo_frequency(digits: bytes) -> Optional[int]:
     145.50000 MHz.
 
     Args:
-        digits: Eight bytes, each 0-9.
+        digits: Eight bytes, each 0-9. Bytes outside 0-9 are not validated
+            and produce a wrong value.
 
     Returns:
         int | None: Frequency in Hz, or ``None`` if all bytes are 0x00/0xFF.
@@ -2097,7 +2233,8 @@ def _decode_dtmf_sequence(data: bytes, *, max_len: int = 5) -> str:
         max_len: Maximum number of symbols to read.
 
     Returns:
-        str: The symbols up to the first 0xFF.
+        str: The symbols up to the first 0xFF or ``max_len`` bytes; bytes
+        that are not valid symbol indexes are skipped.
     """
     sequence = []
     for byte in data[:max_len]:
@@ -2108,11 +2245,27 @@ def _decode_dtmf_sequence(data: bytes, *, max_len: int = 5) -> str:
     return "".join(sequence)
 
 def _decode_le_uint16(buffer: bytes, offset: int) -> int:
-    """Read an unsigned little-endian 16-bit value at ``offset``."""
+    """Read an unsigned little-endian 16-bit value at ``offset``.
+
+    Args:
+        buffer: Source bytes.
+        offset: Byte offset of the low byte.
+
+    Returns:
+        int: The value, 0-65535.
+    """
     return int.from_bytes(buffer[offset : offset + 2], "little")
 
 def _decode_le_int16(buffer: bytes, offset: int) -> int:
-    """Read a signed little-endian 16-bit value at ``offset``."""
+    """Read a signed little-endian 16-bit value at ``offset``.
+
+    Args:
+        buffer: Source bytes.
+        offset: Byte offset of the low byte.
+
+    Returns:
+        int: The value, -32768 to 32767.
+    """
     return int.from_bytes(buffer[offset : offset + 2], "little", signed=True)
 
 def _decode_gb2312(buffer: bytes, offset: int, max_len: int = 12) -> str:
@@ -2233,15 +2386,32 @@ def _encode_dtmf_sequence(seq: str, max_len: int) -> bytes:
     return bytes(out)
 
 def _encode_le_uint16(value: int) -> bytes:
-    """Encode a value as unsigned little-endian 16-bit; negatives become 0."""
+    """Encode a value as unsigned little-endian 16-bit; negatives become 0.
+
+    Args:
+        value: Value to encode; must not exceed 0xFFFF.
+
+    Returns:
+        bytes: Two bytes, low byte first.
+    """
     return int(max(0, value)).to_bytes(2, "little", signed=False)
 
 def _encode_le_int16(value: int) -> bytes:
-    """Encode a value as signed little-endian 16-bit."""
+    """Encode a value as signed little-endian 16-bit.
+
+    Args:
+        value: Value to encode, -32768 to 32767.
+
+    Returns:
+        bytes: Two bytes, low byte first (two's complement).
+    """
     return int(value).to_bytes(2, "little", signed=True)
 
 def _encode_gb2312(text: Optional[str], max_len: int) -> bytes:
     """Encode text as GB2312 into a fixed-length field.
+
+    Text longer than ``max_len`` bytes is cut at the byte limit, which can
+    leave half of a two-byte character.
 
     Args:
         text: Text to encode; unencodable characters are dropped.
@@ -2294,21 +2464,18 @@ class SettingsError(ValueError):
 
 @dataclass(frozen=True)
 class SettingSpec:
-    """Validation rule for one setting.
-
-    Attributes:
-        kind: ``"bool"``, ``"int"``, ``"enum"`` or ``"string"``.
-        min_value: Lowest allowed value for ``"int"``.
-        max_value: Highest allowed value for ``"int"``.
-        choices: Allowed values for ``"enum"``.
-        max_length: Maximum length for ``"string"``.
-    """
+    """Validation rule for one setting."""
 
     kind: str  # "bool", "int", "enum", "string"
+    """``"bool"``, ``"int"``, ``"enum"`` or ``"string"``."""
     min_value: Optional[int] = None
+    """Lowest allowed value for ``"int"``."""
     max_value: Optional[int] = None
+    """Highest allowed value for ``"int"``."""
     choices: Optional[Iterable[int]] = None
+    """Allowed values for ``"enum"``."""
     max_length: Optional[int] = None
+    """Maximum length for ``"string"``."""
 
 # ---------------------------------------------------------------------------
 # Function block helpers ----------------------------------------------------
@@ -2375,6 +2542,11 @@ _FUNCTION_SPECS: Dict[str, SettingSpec] = {
 }
 """Validation rule per function setting, keyed by the names in
 :class:`FunctionSettings`.
+
+Warning:
+    Known issue: ``key_side1/2_short/long`` accept 0-31 here but are stored
+    with mask 0x0F, so values above 15 are written without bit 4 (20 reads
+    back as 4).
 """
 
 def function_keys() -> Iterable[str]:
@@ -2388,6 +2560,12 @@ def function_keys() -> Iterable[str]:
 
 def _coerce_bool(value) -> int:
     """Convert ``True``/``False``/0/1 to 0 or 1.
+
+    Args:
+        value: Proposed value for a boolean setting.
+
+    Returns:
+        int: 1 for ``True``/1, 0 for ``False``/0.
 
     Raises:
         SettingsError: For any other value.
@@ -2409,7 +2587,9 @@ def _validate(spec: SettingSpec, value) -> int:
         int: The value to store (0/1 for booleans).
 
     Raises:
-        SettingsError: If the value is of the wrong type or out of range.
+        SettingsError: If the value is of the wrong type or out of range, or
+            if ``spec.kind`` is not ``bool``/``int``/``enum`` (strings are
+            validated by :func:`set_aprs_value`).
     """
     if spec.kind == "bool":
         return _coerce_bool(value)
@@ -2519,6 +2699,11 @@ _APRS_SPECS: Dict[str, SettingSpec] = {
 }
 """Validation rule per APRS setting, keyed by the names in
 :class:`APRSSettings`.
+
+Warning:
+    Known issue: ``timed_beacon_time`` (0-60) and ``radio_symbol`` (0-99) are
+    stored with mask 0x0F, so values above 15 are truncated (30 reads back as
+    14, 50 as 2).
 """
 
 def aprs_keys() -> Iterable[str]:
@@ -2615,11 +2800,22 @@ def _validate_dtmf_string(value: str, max_len: int) -> str:
     return filtered
 
 def get_dtmf_current_id(settings: DTMFSettings) -> str:
-    """Return the radio's own DTMF ID."""
+    """Return the radio's own DTMF ID.
+
+    Args:
+        settings: DTMF settings to read.
+
+    Returns:
+        str: The own ID as DTMF symbols (up to 5).
+    """
     return settings.current_id
 
 def set_dtmf_current_id(settings: DTMFSettings, value: str) -> None:
     """Set the radio's own DTMF ID (up to 5 symbols).
+
+    Args:
+        settings: DTMF settings to update.
+        value: New ID; surrounding whitespace is stripped.
 
     Raises:
         SettingsError: If the ID is invalid.
@@ -2627,7 +2823,14 @@ def set_dtmf_current_id(settings: DTMFSettings, value: str) -> None:
     settings.current_id = _validate_dtmf_string(value, 5)
 
 def get_dtmf_ptt_mode(settings: DTMFSettings) -> Optional[int]:
-    """Return the PTT ID mode (0 off, 1 BOT, 2 EOT, 3 both), or ``None``."""
+    """Return the PTT ID mode (0 off, 1 BOT, 2 EOT, 3 both), or ``None``.
+
+    Args:
+        settings: DTMF settings to read.
+
+    Returns:
+        Optional[int]: The mode, or ``None`` if not set.
+    """
     return settings.ptt_id_mode
 
 def set_dtmf_ptt_mode(settings: DTMFSettings, value: Optional[int]) -> None:
@@ -2650,13 +2853,27 @@ def set_dtmf_ptt_mode(settings: DTMFSettings, value: Optional[int]) -> None:
 def get_dtmf_code_group(settings: DTMFSettings, index: int) -> str:
     """Return DTMF code group ``index`` (0-based).
 
+    Args:
+        settings: DTMF settings to read.
+        index: Code group number, 0-based.
+
+    Returns:
+        str: The code group as DTMF symbols (up to 6).
+
     Raises:
-        IndexError: If ``index`` is out of range.
+        IndexError: If ``index`` >= the number of code groups or
+            < -len (a negative index counts from the end, unlike
+            :func:`set_dtmf_code_group`).
     """
     return settings.code_groups[index]
 
 def set_dtmf_code_group(settings: DTMFSettings, index: int, value: str) -> None:
     """Set DTMF code group ``index`` (0-based, up to 6 symbols).
+
+    Args:
+        settings: DTMF settings to update.
+        index: Code group number, 0-based.
+        value: New code; surrounding whitespace is stripped.
 
     Raises:
         IndexError: If ``index`` is out of range.
@@ -2693,7 +2910,8 @@ CHANNEL_SECTION_BYTES = 0x8000
 """Total byte length of the channel segment within the clone image.
 
 The segment runs up to the VFO block at 0x8000. Bytes after the last channel
-record (0x7BC0-0x7FFF) are kept verbatim and written back unchanged."""
+record (0x7BC0-0x7FFF) are kept verbatim in the image; the driver never
+writes past 0x7BFF."""
 
 LEGACY_CHANNEL_SECTION_BYTES = 0x7800
 """Channel segment size used by older versions of this driver (960 slots)."""
@@ -2722,7 +2940,7 @@ APRS_SEGMENT_BYTES = 0x80
 """Size of the APRS block (separate address space, commands 0x54/0x58)."""
 ZONE_NAME_SEGMENT_BYTES = 0x100
 """Zone names at radio address 0xC000: 10 x 16 bytes (confirmed on a real
-RT-950 Pro: NoodNetOv at 0xC000, ZoneTwo at 0xC010 ... ZoneTen at 0xC090).
+RT-950 Pro: zone 1 at 0xC000, zone 2 at 0xC010 ... zone 10 at 0xC090).
 Read as two 0x80 blocks (0xC000-0xC0FF)."""
 ZONE_NAME_ADDRESS = 0xC000
 """Radio address of the first zone name."""
@@ -2745,7 +2963,14 @@ KNOWN_SEGMENT_BYTES = (
 """Total size of all segments after the channel segment."""
 
 def _decode_zone_name(raw: bytes) -> str:
-    """Decode one 16-byte zone-name slot as ASCII up to the first 0x00/0xFF."""
+    """Decode one 16-byte zone-name slot as ASCII up to the first 0x00/0xFF.
+
+    Args:
+        raw: The slot bytes; only the first ``ZONE_NAME_READ_LENGTH`` are used.
+
+    Returns:
+        str: The stripped name; invalid bytes are replaced, ``""`` if empty.
+    """
     text = bytearray()
     for byte in raw[:ZONE_NAME_READ_LENGTH]:
         if byte in (0x00, 0xFF):
@@ -2802,7 +3027,15 @@ def encode_zone_names(names: Optional[List[str]], raw: bytes) -> bytes:
 
 
 def _chunk(iterable: Sequence[int], size: int) -> Iterable[bytes]:
-    """Yield consecutive ``size``-byte chunks; a short final chunk is dropped."""
+    """Yield consecutive ``size``-byte chunks; a short final chunk is dropped.
+
+    Args:
+        iterable: Byte sequence to split (the channel segment).
+        size: Chunk length in bytes (``CHANNEL_SIZE`` at the call site).
+
+    Yields:
+        bytes: The next chunk of exactly ``size`` bytes.
+    """
     for i in range(0, len(iterable), size):
         chunk = iterable[i : i + size]
         if len(chunk) == size:
@@ -2816,30 +3049,28 @@ class RadioImage:
     0x8000-byte channel segment followed by the settings segments, the APRS
     block and the zone names. :meth:`from_bytes` and :meth:`to_bytes`
     convert between bytes and this structure.
-
-    Attributes:
-        channels: The 990 channel records, slot 0 first.
-        vfo: VFO A/B/C, or ``None`` if the image is too short.
-        function: Function settings, or ``None``.
-        dtmf: DTMF settings, or ``None``.
-        modulation: Modulation settings, or ``None``.
-        aprs: APRS settings, or ``None``.
-        remainder: All bytes after the channel segment, as read. Used as the
-            base when re-encoding, so unknown bytes survive.
-        channel_extra: Bytes 0x7BC0-0x7FFF after the last channel, kept
-            verbatim.
-        zone_names: Ten zone names, or ``None`` if not present.
     """
 
     channels: List[ChannelRecord]
+    """The 990 channel records, slot 0 first."""
     vfo: Optional[List[VFOSettings]] = None
+    """VFO A/B/C, or ``None`` if the image is too short."""
     function: Optional[FunctionSettings] = None
+    """Function settings, or ``None``."""
     dtmf: Optional[DTMFSettings] = None
+    """DTMF settings, or ``None``."""
     modulation: Optional[ModulationSettings] = None
+    """Modulation settings, or ``None``."""
     aprs: Optional[APRSSettings] = None
+    """APRS settings, or ``None``."""
     remainder: bytes = b""
+    """All bytes after the channel segment, as read. Used as the base when re-
+    encoding, so unknown bytes survive.
+    """
     channel_extra: bytes = b""
+    """Bytes 0x7BC0-0x7FFF after the last channel, kept verbatim."""
     zone_names: Optional[List[str]] = None
+    """Ten zone names, or ``None`` if not present."""
 
     @classmethod
     def from_bytes(
@@ -2970,7 +3201,10 @@ class RadioImage:
         """Serialise the image back into clone-image bytes.
 
         Each settings section is re-encoded on top of its original bytes from
-        ``remainder``; channels use their own change tracking.
+        ``remainder``; channels use their own change tracking. Zone names are
+        re-encoded the same way. A missing or short ``remainder`` is padded
+        with 0xFF. Encoding updates the change-tracking snapshots of edited
+        channels and VFO entries.
 
         Args:
             logger: Logger for encoding warnings; defaults to ``CHANNEL_LOG``.
@@ -3134,19 +3368,16 @@ ENCRYPT_STRINGS: Tuple[bytes, ...] = (
 
 @dataclass(slots=True)
 class CloneSegment:
-    """A contiguous memory region transferred in 0x80-byte blocks.
-
-    Attributes:
-        read_command: Command byte for reading (0x52, or 0x54 for APRS).
-        write_command: Command byte for writing (0x57, or 0x58 for APRS).
-        start: Start address in the radio.
-        length: Length in bytes; a multiple of ``READ_BLOCK``.
-    """
+    """A contiguous memory region transferred in 0x80-byte blocks."""
 
     read_command: int
+    """Command byte for reading (0x52, or 0x54 for APRS)."""
     write_command: int
+    """Command byte for writing (0x57, or 0x58 for APRS)."""
     start: int
+    """Start address in the radio."""
     length: int
+    """Length in bytes; a multiple of ``READ_BLOCK``."""
 
 DEFAULT_SEGMENTS: Tuple[CloneSegment, ...] = (
     CloneSegment(0x52, 0x57, 0x0000, 0x8000),
@@ -3163,8 +3394,9 @@ DEFAULT_SEGMENTS: Tuple[CloneSegment, ...] = (
 """Clone image layout, in image order.
 
 Reading follows this order; the image (``.img``) is the concatenation of
-these segments. Writing uses the same segments in the order given by
-``_WRITE_PLAN``.
+these segments. Writing uses these segments in the order and lengths given
+by ``_WRITE_PLAN`` / :func:`_build_write_plan`: the channel segment is cut to
+0x7800 or 0x7C00, and zone names and APRS are optional.
 """
 
 
@@ -3177,19 +3409,16 @@ class CloneTransportError(RuntimeError):
 
 @dataclass(slots=True)
 class CloneSerialConfig:
-    """Settings for opening the programming cable's serial port.
-
-    Attributes:
-        port: Device name, e.g. ``"/dev/ttyUSB0"`` or ``"COM3"``.
-        baudrate: Serial speed.
-        timeout: Read timeout in seconds (raised to at least 3 s).
-        write_timeout: Write timeout in seconds (raised to at least 3 s).
-    """
+    """Settings for opening the programming cable's serial port."""
 
     port: str
+    """Device name, e.g. ``"/dev/ttyUSB0"`` or ``"COM3"``."""
     baudrate: int = 115200
+    """Serial speed."""
     timeout: float = 1.0
+    """Read timeout in seconds (raised to at least 3 s)."""
     write_timeout: float = 1.0
+    """Write timeout in seconds (raised to at least 3 s)."""
 
 class CloneSerialTransport:
     """The RT-950 Pro serial clone protocol.
@@ -3207,12 +3436,6 @@ class CloneSerialTransport:
 
     Payload bytes are XOR-ed with the key, except 0x00, 0xFF, the key byte
     itself and its complement, and positions where the key byte is a space.
-
-    Attributes:
-        serial: The open port or CHIRP pipe.
-        logger: Logger for protocol tracing.
-        progress_cb: Optional ``callback(done, total, phase)`` called after
-            every block; ``phase`` is ``"read"`` or ``"write"``.
     """
 
     def __init__(
@@ -3234,7 +3457,9 @@ class CloneSerialTransport:
                 one for reproducible tests.
         """
         self.serial = serial_port
+        """The open port or CHIRP pipe; its timeouts are raised to at least 3 s."""
         self.logger = logger or logging.getLogger(__name__ + ".transport")
+        """Logger for protocol tracing (debug level: commands, addresses)."""
         # Enforce sensible minimums to avoid premature timeouts during clone.
         # The port object may be any pipe-like object, so any failure while
         # inspecting it falls back to the minimum.
@@ -3251,10 +3476,15 @@ class CloneSerialTransport:
         except Exception:  # pylint: disable=broad-exception-caught
             self.serial.write_timeout = 3.0
         self._rng = rng or random.Random()
+        """Random source for the 25-byte ``SEND`` frame that selects the key."""
         self._xor_key: Optional[bytearray] = None
+        """4-byte XOR key chosen during :meth:`handshake`; ``None`` before."""
         self._model: Optional[str] = None
-        # Optional per-block progress callback: (done, total, phase)
+        """Model string reported by the radio (``M`` command); ``None`` before
+        :meth:`handshake`."""
         self.progress_cb: Optional[Callable[[int, int, str], None]] = None
+        """Optional ``callback(done, total, phase)`` called after every block;
+        ``phase`` is ``"read"`` or ``"write"``."""
 
     @classmethod
     def open(
@@ -3281,7 +3511,8 @@ class CloneSerialTransport:
 
         Raises:
             CloneTransportError: If no ``serial_class`` is given and
-                pyserial is not installed.
+                pyserial is not installed. Errors raised by ``serial_class``
+                (e.g. ``serial.SerialException``) propagate unchanged.
         """
         if serial_class is None:
             if serial is None:
@@ -3296,11 +3527,23 @@ class CloneSerialTransport:
         return cls(port, logger=logger, rng=rng)
 
     def __enter__(self) -> "CloneSerialTransport":
-        """Return the transport itself for use in a ``with`` statement."""
+        """Return the transport itself for use in a ``with`` statement.
+
+        Returns:
+            CloneSerialTransport: This transport.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
-        """Close the port when leaving a ``with`` block."""
+        """Close the port when leaving a ``with`` block.
+
+        Exceptions are not suppressed.
+
+        Args:
+            exc_type: Exception class raised in the block, or ``None``; unused.
+            exc: Exception instance, or ``None``; unused.
+            tb: Traceback, or ``None``; unused.
+        """
         self.close()
 
     @property
@@ -3323,7 +3566,8 @@ class CloneSerialTransport:
             str: The model string reported by the radio.
 
         Raises:
-            CloneTransportError: If an ACK or the model string is missing.
+            CloneTransportError: If an ACK is missing or wrong, the model
+                string is empty, a read times out or a write is short.
         """
         self.logger.debug("Starting clone handshake")
         if hasattr(self.serial, "reset_input_buffer"):
@@ -3403,8 +3647,9 @@ class CloneSerialTransport:
 
         Each block must be acknowledged. Flash commits are slow, so the ACK
         timeout is 8 s for channel blocks, 10 s for settings blocks (address
-        >= 0x8000) and 30 s for the APRS block (command 0x58), with short
-        pauses after settings and APRS blocks.
+        >= 0x8000) and 30 s for the APRS block (command 0x58). Performs the
+        handshake first if needed and ends the session with ``E``. Pauses:
+        0.05 s after blocks at >= 0x8000, 0.1 s + 0.5 s after the APRS block.
 
         Args:
             data: Payloads concatenated in segment order; its length must equal
@@ -3413,7 +3658,8 @@ class CloneSerialTransport:
                 ``DEFAULT_SEGMENTS``.
 
         Raises:
-            CloneTransportError: On a length mismatch, timeout or missing ACK.
+            CloneTransportError: On a length mismatch, timeout, missing ACK
+                or wrong ACK byte.
         """
         if segments is None:
             segments = DEFAULT_SEGMENTS
@@ -3488,6 +3734,9 @@ class CloneSerialTransport:
     def _write(self, data: bytes) -> None:
         """Send bytes to the radio.
 
+        Args:
+            data: Raw bytes to write; empty data sends nothing.
+
         Raises:
             CloneTransportError: If the port reports a short write.
         """
@@ -3501,6 +3750,12 @@ class CloneSerialTransport:
 
     def _read_exact(self, size: int) -> bytes:
         """Read exactly ``size`` bytes.
+
+        Args:
+            size: Number of bytes to read.
+
+        Returns:
+            bytes: Exactly ``size`` bytes as received (not XOR-decoded).
 
         Raises:
             CloneTransportError: If the port times out first.
@@ -3516,9 +3771,10 @@ class CloneSerialTransport:
     def _build_encryption_frame(self) -> Tuple[bytes, bytearray]:
         """Build the 25-byte ``SEND`` frame and the key it selects.
 
-        Byte 4 is a random code; bytes 5-23 are random indexes 0-19. The code
-        determines which of those indexes selects the key from
-        ``ENCRYPT_STRINGS``.
+        Bytes 0-3 are ``SEND``. Byte 4 is a random code 0x10-0x14 or
+        0x20-0x24. Bytes 5-23 are random indexes 0-19. Byte 24 is 0. Code
+        0x1n selects ``frame[5 + 2n]``, code 0x2n selects ``frame[6 + 2n]``;
+        that byte is the index into ``ENCRYPT_STRINGS`` of the key.
 
         Returns:
             tuple[bytes, bytearray]: The frame to send and the 4-byte XOR key.
@@ -3545,6 +3801,12 @@ class CloneSerialTransport:
 
         Bytes 0x00 and 0xFF, bytes equal to the key byte or its complement, and
         positions where the key byte is a space (0x20) are left unchanged.
+
+        Args:
+            payload: Block payload; modified in place.
+
+        Returns:
+            bytearray: The same ``payload`` object after XOR.
         """
         assert self._xor_key is not None, "XOR key not initialised"
         key = self._xor_key
@@ -3558,14 +3820,30 @@ class CloneSerialTransport:
 
     @staticmethod
     def _iter_read_commands(segments: Sequence[CloneSegment]) -> Iterable[Tuple[int, int]]:
-        """Yield ``(read_command, address)`` for every block of ``segments``."""
+        """Yield ``(read_command, address)`` for every block of ``segments``.
+
+        Args:
+            segments: Regions to read, in order.
+
+        Yields:
+            tuple[int, int]: The segment's read command and the start address of
+            each ``READ_BLOCK``-byte block.
+        """
         for segment in segments:
             for offset in range(0, segment.length, READ_BLOCK):
                 yield segment.read_command, segment.start + offset
 
     @staticmethod
     def _iter_write_commands(segments: Sequence[CloneSegment]) -> Iterable[Tuple[int, int]]:
-        """Yield ``(write_command, address)`` for every block of ``segments``."""
+        """Yield ``(write_command, address)`` for every block of ``segments``.
+
+        Args:
+            segments: Regions to write, in order.
+
+        Yields:
+            tuple[int, int]: The segment's write command and the start address of
+            each ``READ_BLOCK``-byte block.
+        """
         for segment in segments:
             for offset in range(0, segment.length, READ_BLOCK):
                 yield segment.write_command, segment.start + offset
@@ -3648,7 +3926,12 @@ except ImportError:  # pragma: no cover - fallback for local development
             self.valid_name_length = 12
 
     class _CloneModeRadio:
-        """Stand-in for ``chirp_common.CloneModeRadio``."""
+        """Stand-in for ``chirp_common.CloneModeRadio``.
+
+        Args:
+            *args: Positional arguments; ignored.
+            **kwargs: Keyword arguments; only ``pipe`` is used and stored as ``self.pipe``.
+        """
 
         VENDOR = ""
         MODEL = ""
@@ -3690,7 +3973,11 @@ except ImportError:  # pragma: no cover - fallback for local development
             return obj
 
     class _RadioSettingValue:
-        """Stand-in base for ``chirp.settings.RadioSettingValue*``."""
+        """Stand-in base for ``chirp.settings.RadioSettingValue*``.
+
+        Args:
+            value: Initial current value.
+        """
 
         def __init__(self, value=None):
             self._value = value
@@ -3717,7 +4004,12 @@ except ImportError:  # pragma: no cover - fallback for local development
             return str(self._value)
 
     class RadioSettingValueBoolean(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueBoolean``."""
+        """Stand-in for ``chirp.settings.RadioSettingValueBoolean``.
+
+        Args:
+            current: Initial value; stored as ``bool(current)``.
+            mem_vals: Ignored by the stand-in.
+        """
 
         def __init__(self, current, mem_vals=(0, 1)):
             super().__init__(bool(current))
@@ -3726,7 +4018,14 @@ except ImportError:  # pragma: no cover - fallback for local development
             super().set_value(bool(value))
 
     class RadioSettingValueInteger(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueInteger``."""
+        """Stand-in for ``chirp.settings.RadioSettingValueInteger``.
+
+        Args:
+            minval: Lowest value accepted by ``set_value``.
+            maxval: Highest value accepted by ``set_value``.
+            current: Initial value; stored as ``int(current)``.
+            step: Ignored by the stand-in.
+        """
 
         def __init__(self, minval, maxval, current, step=1):
             self._min = minval
@@ -3740,7 +4039,12 @@ except ImportError:  # pragma: no cover - fallback for local development
             super().set_value(value)
 
     class RadioSettingValueList(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueList``."""
+        """Stand-in for ``chirp.settings.RadioSettingValueList``.
+
+        Args:
+            choices: Allowed values, in display order.
+            current_index: Index into ``choices`` of the initial value.
+        """
 
         def __init__(self, choices, current_index=0):
             self.choices = list(choices)
@@ -3763,7 +4067,16 @@ except ImportError:  # pragma: no cover - fallback for local development
             raise ValueError
 
     class RadioSettingValueString(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueString``."""
+        """Stand-in for ``chirp.settings.RadioSettingValueString``.
+
+        Args:
+            minlength: Ignored by the stand-in.
+            maxlength: Maximum length accepted by ``set_value``.
+            current: Initial text; ``None`` or empty becomes ``""``.
+            autopad: Stored as ``self.autopad``; not otherwise used.
+            charset: Ignored by the stand-in.
+            mem_pad_char: Stored as ``self.mem_pad_char``; not otherwise used.
+        """
 
         def __init__(self, minlength, maxlength, current, autopad=True,
                      charset=None, mem_pad_char=' '):
@@ -3779,7 +4092,13 @@ except ImportError:  # pragma: no cover - fallback for local development
             super().set_value(value)
 
     class RadioSettingGroup:
-        """Stand-in for ``chirp.settings.RadioSettingGroup``."""
+        """Stand-in for ``chirp.settings.RadioSettingGroup``.
+
+        Args:
+            name: Internal group name.
+            label: Display label.
+            *elements: Initial child settings or groups, appended in order.
+        """
 
         def __init__(self, name, label, *elements):
             self.name = name
@@ -3817,7 +4136,13 @@ except ImportError:  # pragma: no cover - fallback for local development
                     yield from child.walk()
 
     class RadioSetting(RadioSettingGroup):
-        """Stand-in for ``chirp.settings.RadioSetting``."""
+        """Stand-in for ``chirp.settings.RadioSetting``.
+
+        Args:
+            name: Internal setting name.
+            label: Display label.
+            value: The ``RadioSettingValue*`` object holding the value.
+        """
 
         def __init__(self, name, label, value):
             super().__init__(name, label, value)
@@ -3842,13 +4167,22 @@ except ImportError:  # pragma: no cover - fallback for local development
             return self.name
 
     class RadioSettings(RadioSettingGroup):
-        """Stand-in for ``chirp.settings.RadioSettings``."""
+        """Stand-in for ``chirp.settings.RadioSettings``.
+
+        Args:
+            *groups: Top-level setting groups, appended in order.
+        """
 
         def __init__(self, *groups):
             super().__init__('root', 'root', *groups)
 
     class chirp_common:  # type: ignore  # pylint: disable=invalid-name
-        """Stand-in for the ``chirp.chirp_common`` module."""
+        """Stand-in for the ``chirp.chirp_common`` module.
+
+        Lacks ``Status``, ``DTCS_CODES`` and ``CHARSET_ASCII``, so
+        ``get_features``, ``get_settings`` and ``get_memory`` of a non-empty
+        channel fail without CHIRP. It exists for documentation builds.
+        """
 
         Memory = _Memory
         RadioFeatures = _RadioFeatures
@@ -4127,7 +4461,14 @@ def _extract_memory_extra(mem) -> Dict[str, int]:
     return extras
 
 def _format_frequency(hz: Optional[int]) -> str:
-    """Format Hz for a text setting; ``None`` and 0 give ``""``."""
+    """Format Hz for a text setting; ``None`` and 0 give ``""``.
+
+    Args:
+        hz: Frequency in Hz, or ``None``.
+
+    Returns:
+        str: The text from ``chirp_common.format_freq``, or ``""``.
+    """
     if hz in (None, 0):
         return ""
     return chirp_common.format_freq(hz)
@@ -4201,8 +4542,10 @@ def _build_vfo_group(vfos: Optional[List[VFOSettings]]) -> RadioSettingGroup:
         vfos: VFO entries, or ``None``.
 
     Returns:
-        RadioSettingGroup: Frequency, offset, power, bandwidth, modulation,
-        tones-related flags, step and band for each VFO.
+        RadioSettingGroup: One subgroup per VFO with RX frequency, offset
+        direction, offset, TX power, bandwidth, RX modulation, busy lockout,
+        learn FHSS, scrambler code (0-9), encryption, step, frequency band and
+        signalling group (0-15). Empty if ``vfos`` is empty or ``None``.
     """
     group = RadioSettingGroup('vfo', 'VFO Profiles')
     if not vfos:
@@ -4357,7 +4700,8 @@ def _build_modulation_group(modulation: ModulationSettings) -> RadioSettingGroup
         modulation: Modulation settings.
 
     Returns:
-        RadioSettingGroup: Global parameters plus FM, AM and SSB memories.
+        RadioSettingGroup: Global parameters, plus FM, AM and SSB memory
+        subgroups when ``modulation.channels`` is not empty.
     """
     group = RadioSettingGroup('modulation', 'Broadcast/Modulation')
     global_group = RadioSettingGroup('modulation.global', 'Global Settings')
@@ -4594,11 +4938,29 @@ def _build_modulation_channel_group(
 
 
 def _apply_modulation_int(rsetting, modulation, attr):
-    """Settings callback: store a non-negative integer in ``modulation.attr``."""
+    """Settings callback: store a non-negative integer in ``modulation.attr``.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        modulation: Modulation settings to update.
+        attr: Attribute name on ``modulation``, e.g. ``"fm_current_channel"``.
+    """
     setattr(modulation, attr, max(0, _value_as_int(rsetting.value)))
 
 def _apply_modulation_channel_frequency(rsetting, modulation, index, attr):
-    """Settings callback: store a parsed frequency (or ``None``) in an entry."""
+    """Settings callback: store a parsed frequency (or ``None``) in an entry.
+
+    Empty text stores ``None``; otherwise the text is parsed to Hz.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        modulation: Modulation settings to update.
+        index: Index into ``modulation.channels`` (0-15).
+        attr: ``"fm_frequency"``, ``"am_frequency"`` or ``"ssb_frequency"``.
+
+    Raises:
+        ValueError: If the text is not a valid positive frequency.
+    """
     try:
         value = _value_as_string(rsetting.value).strip()
     except AttributeError:
@@ -4607,17 +4969,37 @@ def _apply_modulation_channel_frequency(rsetting, modulation, index, attr):
     setattr(modulation.channels[index], attr, freq)
 
 def _apply_modulation_channel_name(rsetting, modulation, index, attr):
-    """Settings callback: store a memory name in an entry."""
+    """Settings callback: store a memory name in an entry.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        modulation: Modulation settings to update.
+        index: Index into ``modulation.channels`` (0-15).
+        attr: ``"fm_name"``, ``"am_name"`` or ``"ssb_name"``.
+    """
     name = _value_as_string(rsetting.value)
     setattr(modulation.channels[index], attr, name)
 
 def _apply_modulation_channel_int(rsetting, modulation, index, attr):
-    """Settings callback: store a non-negative integer in an entry."""
+    """Settings callback: store a non-negative integer in an entry.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        modulation: Modulation settings to update.
+        index: Index into ``modulation.channels`` (0-15).
+        attr: Attribute name on the entry (``"ssb_bandwidth"`` at the call site).
+    """
     value = max(0, _value_as_int(rsetting.value))
     setattr(modulation.channels[index], attr, value)
 
 def _apply_modulation_channel_beat(rsetting, modulation, index):
-    """Settings callback: store the SSB beat offset, clamped to int16."""
+    """Settings callback: store the SSB beat offset, clamped to int16.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        modulation: Modulation settings to update.
+        index: Index into ``modulation.channels`` (0-15).
+    """
     value = _value_as_int(rsetting.value)
     if value < -32768:
         value = -32768
@@ -4627,6 +5009,13 @@ def _apply_modulation_channel_beat(rsetting, modulation, index):
 
 def _apply_vfo_frequency(rsetting, vfo):
     """Settings callback: set the VFO receive frequency (empty clears it).
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update (``rx_hz``, in Hz).
+
+    Returns:
+        None: Nothing; ``vfo`` is updated in place.
 
     Raises:
         RadioError: If the text is not a valid frequency.
@@ -4644,12 +5033,24 @@ def _apply_vfo_frequency(rsetting, vfo):
         raise errors.RadioError(str(exc)) from exc
 
 def _apply_vfo_offset_direction(rsetting, vfo):
-    """Settings callback: set the VFO offset direction from the list choice."""
+    """Settings callback: set the VFO offset direction from the list choice.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     index = _value_as_index(rsetting.value, _VFO_OFFSET_CHOICES)
     vfo.offset_direction = _VFO_OFFSET_CHOICES[index][1]
 
 def _apply_vfo_offset(rsetting, vfo):
     """Settings callback: set the VFO offset (empty clears it).
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update (``offset_hz``, in Hz).
+
+    Returns:
+        None: Nothing; ``vfo`` is updated in place.
 
     Raises:
         RadioError: If the text is not a valid frequency.
@@ -4667,39 +5068,81 @@ def _apply_vfo_offset(rsetting, vfo):
         raise errors.RadioError(str(exc)) from exc
 
 def _apply_vfo_power(rsetting, vfo):
-    """Settings callback: set the VFO transmit power from the list choice."""
+    """Settings callback: set the VFO transmit power from the list choice.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     index = _value_as_index(rsetting.value, _VFO_POWER_CHOICES)
     vfo.tx_power = _VFO_POWER_CHOICES[index][1]
 
 def _apply_vfo_bandwidth(rsetting, vfo):
-    """Settings callback: set the VFO bandwidth from the list choice."""
+    """Settings callback: set the VFO bandwidth from the list choice.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     index = _value_as_index(rsetting.value, _VFO_BANDWIDTH_CHOICES)
     vfo.bandwidth = _VFO_BANDWIDTH_CHOICES[index][1]
 
 def _apply_vfo_modulation(rsetting, vfo):
-    """Settings callback: set the VFO receive modulation from the list choice."""
+    """Settings callback: set the VFO receive modulation from the list choice.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     index = _value_as_index(rsetting.value, _VFO_MODULATION_CHOICES)
     vfo.rx_modulation = _VFO_MODULATION_CHOICES[index][1]
 
 def _apply_vfo_busy_lockout(rsetting, vfo):
-    """Settings callback: set the VFO busy-channel lockout flag."""
+    """Settings callback: set the VFO busy-channel lockout flag.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     vfo.busy_lockout = bool(_value_as_bool(rsetting.value))
 
 def _apply_vfo_learn_fhss(rsetting, vfo):
-    """Settings callback: set the VFO learn-FHSS flag."""
+    """Settings callback: set the VFO learn-FHSS flag.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     vfo.learn_fhss = bool(_value_as_bool(rsetting.value))
 
 def _apply_vfo_scrambler(rsetting, vfo):
-    """Settings callback: set the VFO scrambler code (low nibble)."""
+    """Settings callback: set the VFO scrambler code.
+
+    Negative values become 0; the value is then masked to 4 bits (0-15).
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     vfo.scrambler = max(0, _value_as_int(rsetting.value)) & 0x0F
 
 def _apply_vfo_encryption(rsetting, vfo):
-    """Settings callback: set the VFO encryption mode from the list choice."""
+    """Settings callback: set the VFO encryption mode from the list choice.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     index = _value_as_index(rsetting.value, _VFO_ENCRYPTION_CHOICES)
     vfo.encryption = _VFO_ENCRYPTION_CHOICES[index][1]
 
 def _apply_vfo_step(rsetting, vfo):
-    """Settings callback: set the VFO step index from the list choice."""
+    """Settings callback: set the VFO step index from the list choice.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     index = _value_as_index(rsetting.value, _VFO_STEP_CHOICES)
     vfo.step_freq_index = _VFO_STEP_CHOICES[index][1]
 
@@ -4710,11 +5153,20 @@ def _apply_vfo_freq_band(rsetting, vfo):
         Known issue: the value is read with :func:`_value_as_int`, but the
         UI offers a list whose CHIRP value is the label text, so this sets
         the band to 0 whenever settings are applied.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
     """
     vfo.freq_band = max(0, _value_as_int(rsetting.value)) & 0x0F
 
 def _apply_vfo_signalling(rsetting, vfo):
-    """Settings callback: set the VFO signalling group (low nibble)."""
+    """Settings callback: set the VFO signalling group (low nibble).
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        vfo: VFO entry to update.
+    """
     vfo.signalling_group = max(0, _value_as_int(rsetting.value)) & 0x0F
 
 def _build_setting_value(meta, current):
@@ -4754,7 +5206,14 @@ def _build_setting_value(meta, current):
     raise SettingsError(f"Unsupported setting type: {kind}")
 
 def _value_as_bool(value_obj):
-    """Read a CHIRP value object (or plain value) as ``bool``."""
+    """Read a CHIRP value object (or plain value) as ``bool``.
+
+    Args:
+        value_obj: A ``RadioSettingValue*`` object (``get_value`` is used) or a plain value.
+
+    Returns:
+        bool: Truth value of the underlying value.
+    """
     if hasattr(value_obj, 'get_value'):
         return bool(value_obj.get_value())
     return bool(value_obj)
@@ -4763,6 +5222,13 @@ def _value_as_int(value_obj, default=0):
     """Read a CHIRP value object (or plain value) as ``int``.
 
     Returns ``default`` if the value cannot be converted.
+
+    Args:
+        value_obj: A ``RadioSettingValue*`` object (``get_value`` is used) or a plain value.
+        default: Value returned when the conversion raises.
+
+    Returns:
+        int: ``int()`` of the underlying value, or ``default``.
     """
     try:
         if hasattr(value_obj, 'get_value'):
@@ -4779,6 +5245,14 @@ def _value_as_index(value_obj, choices):
 
     Tries ``int(value)`` first, then looks the label up in ``choices``.
     Falls back to 0.
+
+    Args:
+        value_obj: A list ``RadioSettingValue`` object or a plain value.
+        choices: Sequence of ``(label, value)`` pairs.
+
+    Returns:
+        int: ``int(value_obj)`` if that works (not range-checked), else the
+        position of the label in ``choices``, else 0.
     """
     try:
         return int(value_obj)
@@ -4795,7 +5269,14 @@ def _value_as_index(value_obj, choices):
             return 0
 
 def _value_as_string(value_obj):
-    """Read a CHIRP value object (or plain value) as ``str``."""
+    """Read a CHIRP value object (or plain value) as ``str``.
+
+    Args:
+        value_obj: A ``RadioSettingValue*`` object (``get_value`` is used) or a plain value.
+
+    Returns:
+        str: ``str()`` of the underlying value.
+    """
     if hasattr(value_obj, 'get_value'):
         raw = value_obj.get_value()
     else:
@@ -4804,6 +5285,12 @@ def _value_as_string(value_obj):
 
 def _create_function_setting(func_settings, key, meta):
     """Create one function ``RadioSetting`` from its UI table entry.
+
+    Args:
+        func_settings: Function settings that hold the current value and are
+            updated on apply.
+        key: Setting name, a key of ``_FUNCTION_UI``.
+        meta: The ``_FUNCTION_UI`` entry for ``key`` (label, type, parameters).
 
     Returns:
         RadioSetting | None: The setting, or ``None`` for an unknown key.
@@ -4821,6 +5308,12 @@ def _create_function_setting(func_settings, key, meta):
 def _create_aprs_setting(aprs_settings, key, meta):
     """Create one APRS ``RadioSetting`` from its UI table entry.
 
+    Args:
+        aprs_settings: APRS settings that hold the current value and are
+            updated on apply.
+        key: Setting name, a key of ``_APRS_UI``.
+        meta: The ``_APRS_UI`` entry for ``key`` (label, type, parameters).
+
     Returns:
         RadioSetting | None: The setting, or ``None`` for an unknown key.
     """
@@ -4835,7 +5328,14 @@ def _create_aprs_setting(aprs_settings, key, meta):
     return rsetting
 
 def _build_function_group(func_settings):
-    """Build the *Function Settings* group from ``_FUNCTION_UI``."""
+    """Build the *Function Settings* group from ``_FUNCTION_UI``.
+
+    Args:
+        func_settings: Function settings of the image.
+
+    Returns:
+        RadioSettingGroup: One setting per known key of ``_FUNCTION_UI``.
+    """
     group = RadioSettingGroup('function', 'Function Settings')
     for key, meta in _FUNCTION_UI.items():
         setting = _create_function_setting(func_settings, key, meta)
@@ -4844,7 +5344,14 @@ def _build_function_group(func_settings):
     return group
 
 def _build_aprs_group(aprs_settings):
-    """Build the *APRS Settings* group from ``_APRS_UI``."""
+    """Build the *APRS Settings* group from ``_APRS_UI``.
+
+    Args:
+        aprs_settings: APRS settings of the image.
+
+    Returns:
+        RadioSettingGroup: One setting per known key of ``_APRS_UI``.
+    """
     group = RadioSettingGroup('aprs', 'APRS Settings')
     for key, meta in _APRS_UI.items():
         setting = _create_aprs_setting(aprs_settings, key, meta)
@@ -4857,6 +5364,12 @@ def _build_dtmf_group(dtmf_settings):
 
     Shows the own ID, the PTT ID mode and the first ``_DTMF_GROUP_LIMIT``
     code groups.
+
+    Args:
+        dtmf_settings: DTMF settings of the image.
+
+    Returns:
+        RadioSettingGroup: The ID, mode and code-group settings.
     """
     group = RadioSettingGroup('dtmf', 'DTMF Settings')
     current_id = get_dtmf_current_id(dtmf_settings)
@@ -4886,6 +5399,12 @@ def _build_dtmf_group(dtmf_settings):
 def _apply_function_setting(rsetting, func_settings, key, meta):
     """Settings callback: validate and store a function setting.
 
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        func_settings: Function settings to update.
+        key: Setting name, a key of ``_FUNCTION_UI``.
+        meta: The ``_FUNCTION_UI`` entry for ``key``; ``type`` selects the conversion.
+
     Raises:
         RadioError: If the value is not allowed.
     """
@@ -4905,6 +5424,12 @@ def _apply_function_setting(rsetting, func_settings, key, meta):
 
 def _apply_aprs_setting(rsetting, aprs_settings, key, meta):
     """Settings callback: validate and store an APRS setting.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        aprs_settings: APRS settings to update.
+        key: Setting name, a key of ``_APRS_UI``.
+        meta: The ``_APRS_UI`` entry for ``key``; ``type`` selects the conversion.
 
     Raises:
         RadioError: If the value is not allowed.
@@ -4928,6 +5453,10 @@ def _apply_aprs_setting(rsetting, aprs_settings, key, meta):
 def _apply_dtmf_id(rsetting, dtmf_settings):
     """Settings callback: store the own DTMF ID.
 
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        dtmf_settings: DTMF settings to update.
+
     Raises:
         RadioError: If the ID is invalid.
     """
@@ -4938,6 +5467,10 @@ def _apply_dtmf_id(rsetting, dtmf_settings):
 
 def _apply_dtmf_mode(rsetting, dtmf_settings):
     """Settings callback: store the PTT ID mode.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        dtmf_settings: DTMF settings to update.
 
     Raises:
         RadioError: If the mode is invalid.
@@ -4950,6 +5483,11 @@ def _apply_dtmf_mode(rsetting, dtmf_settings):
 
 def _apply_dtmf_group(rsetting, dtmf_settings, index):
     """Settings callback: store one DTMF code group.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        dtmf_settings: DTMF settings to update.
+        index: Code group number, 0-based (0 to ``_DTMF_GROUP_LIMIT - 1``).
 
     Raises:
         RadioError: If the code is invalid.
@@ -4986,8 +5524,8 @@ means the full segment length. The image layout and the read order stay
 _LAYOUT_VERSION = 4
 """Layout version stored in ``.img`` metadata (``rt950_layout``).
 
-Images without it predate the zone names at 0xC000; their zone-name bytes
-are not trusted and not written back.
+Images without it, or with a lower value, predate the zone names at
+0xC000; their zone-name bytes are not trusted and not written back.
 """
 
 
@@ -5000,8 +5538,22 @@ def _build_write_plan(
 ) -> Tuple[List["CloneSegment"], bytes]:
     """Split the layout-ordered payload into the segments/data to write.
 
-    write_zone_names=False skips 0xC000 (data in the image was not read from
-    there); channel_bytes limits the channel write for old 960-slot images.
+    ``write_zone_names=False`` skips 0xC000 (the image's zone names were not
+    read from there). ``channel_bytes`` caps the channel write;
+    :meth:`RT950ProRadio._write_options` passes 0x7800 (channels 1-960)
+    unless channels 961-990 changed.
+
+    Args:
+        payload: Complete clone payload in ``DEFAULT_SEGMENTS`` order (as built
+            by :func:`_build_clone_payload`).
+        write_zone_names: Include the zone-name segment (0xC000).
+        channel_bytes: Maximum number of channel-segment bytes to write from
+            address 0x0000; the ``_WRITE_PLAN`` limit of 0x7C00 still applies.
+        write_aprs: Include the APRS segment (write command 0x58).
+
+    Returns:
+        tuple[list[CloneSegment], bytes]: The segments to write, in
+        ``_WRITE_PLAN`` order, and their data concatenated in the same order.
     """
     offsets = []
     cursor = 0
@@ -5027,11 +5579,15 @@ def _build_write_plan(
 def _build_clone_payload(image: RadioImage) -> bytes:
     """Serialise ``image`` into the byte order of ``DEFAULT_SEGMENTS``.
 
+    Args:
+        image: The parsed image to serialise.
+
     Returns:
         bytes: ``_SEGMENT_LENGTH`` bytes.
 
     Raises:
-        ValueError: If the result has the wrong length.
+        ValueError: If ``image.to_bytes()`` fails (e.g. a tone that cannot be
+            encoded) or the result has the wrong length.
     """
     buffer = image.to_bytes()
     payload = bytearray()
@@ -5052,20 +5608,18 @@ class _ToneInfo:
     """Tone fields in CHIRP terms.
 
     Not used by the current driver code.
-
-    Attributes:
-        mode: CHIRP tone mode (``""``, ``"Tone"``, ``"TSQL"``, ``"DTCS"``).
-        rtone: TX CTCSS in Hz.
-        ctone: RX CTCSS in Hz.
-        dtcs: DCS code.
-        polarity: DCS polarity.
     """
 
     mode: str = ""
+    """CHIRP tone mode (``""``, ``"Tone"``, ``"TSQL"``, ``"DTCS"``)."""
     rtone: float = 0.0
+    """CHIRP ``rtone`` in Hz (Tone-mode tone; TX CTCSS in this driver's mapping)."""
     ctone: float = 0.0
+    """CHIRP ``ctone`` in Hz (TSQL tone; RX CTCSS in this driver's mapping)."""
     dtcs: int = 0
+    """DCS code."""
     polarity: str = "N"
+    """CHIRP two-letter DCS polarity, e.g. ``"NN"``."""
 
 # ---------------------------------------------------------------------------
 # Driver implementation -----------------------------------------------------
@@ -5124,7 +5678,7 @@ def _zone_label(image, zone: int) -> str:
         zone: Zone number, 1-10.
 
     Returns:
-        str: ``"1 NoodNetOv"`` for a named zone, ``"Zone 1"`` otherwise.
+        str: ``"1 VHF-LOCAL"`` for a named zone, ``"Zone 1"`` otherwise.
     """
     names = ((image.zone_names if image is not None else None)
              or [""] * ZONE_COUNT)
@@ -5135,7 +5689,9 @@ def _zone_label(image, zone: int) -> str:
 def _apply_zone_name(rsetting, image, index):
     """Settings callback: store an edited zone name in the image.
 
-    The name is reduced to ASCII and cut to ``ZONE_NAME_LENGTH``.
+    Surrounding spaces are stripped, non-ASCII characters are dropped and
+    the result is cut to ``ZONE_NAME_LENGTH`` (10). ``image.zone_names`` is
+    created (ten empty names) if it is ``None``.
 
     Args:
         rsetting: The CHIRP ``RadioSetting`` holding the new name.
@@ -5174,37 +5730,66 @@ def _build_zone_group(image):
 class RT950ProRadio(chirp_common.CloneModeRadio):
     """CHIRP clone-mode driver for the Radtel RT-950 Pro.
 
-    The radio's 990 channels are exposed twice: as memories 1-990 on this
-    object (memory ``(z - 1) * 99 + k`` is zone *z*, channel *k*) and as one
-    :class:`RT950ProZoneRadio` sub-device per zone with memories 1-99.
+    Memories 1-990 on this object (memory ``(z - 1) * 99 + k`` is zone *z*,
+    channel *k*) are the driver API; CHIRP's user interface shows only the
+    ten :class:`RT950ProZoneRadio` sub-devices (memories 1-99 each), which
+    map onto them.
 
     Internally all data lives in a :class:`RadioImage`; the CHIRP memory
     map is rebuilt from it whenever CHIRP asks for it.
-
-    Attributes:
-        VENDOR: Vendor name shown by CHIRP.
-        MODEL: Model name shown by CHIRP.
-        BAUD_RATE: Serial speed of the programming cable.
     """
 
     _memsize = _SEGMENT_LENGTH
+    """Size of a complete clone image in bytes (``_SEGMENT_LENGTH``).
+
+    CHIRP returns it from ``get_memsize()`` and shows it in the radio-info
+    dialog; the driver itself does not use it.
+    """
     VENDOR = "Radtel"
+    """Vendor name shown by CHIRP."""
     MODEL = "RT-950 Pro"
+    """Model name shown by CHIRP."""
     BAUD_RATE = 115200
+    """Serial speed of the programming cable."""
 
     def __init__(self, *args, **kwargs) -> None:
         """Create the driver; arguments are passed to CHIRP unchanged.
 
         State used by :meth:`process_mmap` is initialised first, because
         CHIRP's constructor may load an image and call it.
+
+        Args:
+            *args: Normally the single ``pipe`` argument of
+                ``CloneModeRadio.__init__``: a serial port, an image file name
+                or a ``MemoryMapBytes`` (the last two make CHIRP call
+                :meth:`process_mmap`).
+            **kwargs: Passed on unchanged; the stand-in only uses ``pipe``.
         """
         self._image: Optional[RadioImage] = None
+        """Parsed clone image; the single source of all channel and settings
+        data. ``None`` until an image is downloaded or loaded."""
         self._memory_cache: dict[int, chirp_common.Memory] = {}
+        """CHIRP ``Memory`` objects by memory number (1-990), built on first
+        :meth:`get_memory` and cleared when a new image is processed or settings
+        are applied. The zone sub-devices share this dict."""
         self._memobj = None
+        """Raw ``bitwise`` view of the memory map (``MEM_FORMAT``) for CHIRP's
+        developer-mode Browser tab; ``None`` if it could not be built."""
         self._zone_names_valid = False
+        """True when the image holds zone names read from 0xC000 (image of
+        layout version ``_LAYOUT_VERSION`` or later); only then are zone names
+        written to the radio."""
         self._legacy_960 = False
+        """True for an image saved by the old 960-slot driver; channels
+        961-990 are then never written."""
         self._aprs_original: Optional[bytes] = None
+        """APRS block as it was when the image was processed; the APRS block
+        is written only when the current bytes differ. ``None`` disables the
+        APRS write."""
         self._high_channels_original: Optional[bytes] = None
+        """Bytes 0x7800-0x7BFF (channels 961-990) as they were when the image
+        was processed; that range is written only when it changed. ``None``
+        disables writing it."""
         super().__init__(*args, **kwargs)
 
     # ------------------------------------------------------------------
@@ -5265,14 +5850,19 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
 
         Also upgrades images saved by earlier driver versions:
 
-        * full size without layout metadata: zone names are cleared and will
-          not be written;
+        * full size without ``rt950_layout`` metadata, or with a version
+          below ``_LAYOUT_VERSION``: zone-name bytes are replaced by 0xFF and
+          not written;
         * without zone-name segment: 0xFF zone names are appended;
         * old 960-slot image: the missing 0x7800-0x7FFF range is inserted as
           empty, so channels 961-990 show as empty.
 
         Finally it snapshots the APRS block and channels 961-990 so that
         :meth:`_write_options` can tell whether they changed.
+
+        Returns:
+            None: Nothing; the result is stored in ``self._image`` (``None`` when
+            there is no memory map or it is empty).
 
         Raises:
             RadioError: If the image cannot be parsed.
@@ -5372,7 +5962,15 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         self._parse_memobj()
 
     def get_mmap(self):  # type: ignore[override]
-        """Return the memory map, refreshed from the current image."""
+        """Return the memory map, refreshed from the current image.
+
+        Returns:
+            memmap.MemoryMapBytes: ``self._mmap``, rebuilt from the image when one
+            is loaded.
+
+        Raises:
+            ValueError: If the image cannot be serialised.
+        """
         self._refresh_mmap()
         return self._mmap
 
@@ -5381,13 +5979,28 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
 
         Args:
             filename: Destination ``.img`` file.
+
+        Returns:
+            None: CHIRP's ``CloneModeRadio.save_mmap`` returns nothing; the
+            ``return`` only passes that through.
+
+        Raises:
+            ValueError: If the image cannot be serialised.
+            Exception: ``"File Access Error"`` from CHIRP on an ``IOError``.
         """
         self._refresh_mmap()
         # pylint cannot see save_mmap on the stand-in base class.
         return super().save_mmap(filename)  # pylint: disable=no-member
 
     def _aprs_bytes(self, payload: bytes) -> bytes:
-        """Return the APRS block (segment 6) from a clone payload."""
+        """Return the APRS block (segment 6) from a clone payload.
+
+        Args:
+            payload: Clone payload in ``DEFAULT_SEGMENTS`` order.
+
+        Returns:
+            bytes: The ``APRS_SEGMENT_BYTES`` (128) bytes of the APRS block.
+        """
         start = sum(seg.length for seg in DEFAULT_SEGMENTS[:6])
         return bytes(payload[start : start + DEFAULT_SEGMENTS[6].length])
 
@@ -5424,18 +6037,24 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         }
 
     def get_sub_devices(self):  # type: ignore[override]
-        """Return one :class:`RT950ProZoneRadio` per zone (memory tabs 1-10)."""
+        """Return one :class:`RT950ProZoneRadio` per zone (memory tabs 1-10).
+
+        Returns:
+            list[RT950ProZoneRadio]: Ten sub-devices, zone 1 first.
+        """
         return [RT950ProZoneRadio(self, zone) for zone in range(1, ZONE_COUNT + 1)]
 
     def sync_in(self):  # type: ignore[override]
         """Download the complete image from the radio.
 
         Reports progress per block through CHIRP's ``status_fn`` when
-        available, then parses the image and stores the layout version in the
-        image metadata.
+        available, then replaces ``self._metadata`` with
+        ``{'rt950_layout': _LAYOUT_VERSION}`` and parses the image with
+        :meth:`process_mmap` (which relies on that version).
 
         Raises:
-            RadioError: If no port is open or the clone read fails.
+            RadioError: If no port is open, the clone read fails, or the
+                image cannot be parsed.
         """
         if self.pipe is None:
             raise errors.RadioError("Serial pipe not initialised")
@@ -5463,7 +6082,13 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             ]
 
             def _progress(done: int, total: int, phase: str) -> None:
-                """Map a block count to a 'Reading ...' status message."""
+                """Map a block count to a 'Reading ...' status message.
+
+                Args:
+                    done: Blocks transferred so far (1-based count).
+                    total: Total number of blocks in the transfer.
+                    phase: ``"read"`` or ``"write"``; selects the message verb.
+                """
                 try:
                     block_index = max(0, int(done) - 1)
                     seg_idx = 0
@@ -5508,6 +6133,8 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             RadioError: If no port or image is available or the write fails.
                 A missing APRS acknowledgement gets its own message, because
                 everything else was already written at that point.
+            ValueError: If the image cannot be serialised (e.g. a DCS tone
+                with polarity ``R``); raised before anything is sent.
         """
         if self.pipe is None:
             raise errors.RadioError("Serial pipe not initialised")
@@ -5542,7 +6169,13 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
                           and (index != 6 or opts['write_aprs'])]
 
             def _progress(done: int, total: int, phase: str) -> None:
-                """Map a block count to a 'Writing ...' status message."""
+                """Map a block count to a 'Writing ...' status message.
+
+                Args:
+                    done: Blocks transferred so far (1-based count).
+                    total: Total number of blocks in the transfer.
+                    phase: Transfer phase from the transport; unused.
+                """
                 del phase  # always "write" here
                 try:
                     block_index = max(0, int(done) - 1)
@@ -5615,15 +6248,17 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def set_settings(self, settings):  # type: ignore[override]
         """Apply edited settings to the image.
 
-        Runs the apply callback of every setting; the callbacks write into the
-        :class:`RadioImage`.
+        Runs the apply callback of every setting that has one (CHIRP passes
+        the whole tree, so every callback runs on each apply); the callbacks
+        write into the :class:`RadioImage`. Then clears the memory cache.
 
         Args:
             settings: The tree returned by :meth:`get_settings`, edited.
 
         Raises:
             RadioError: If no image is loaded, the container is unexpected or a
-                value is rejected.
+                callback rejects a value.
+            ValueError: For an invalid modulation-memory frequency.
         """
         self._require_image()
         if not isinstance(settings, RadioSettings):
@@ -5642,6 +6277,9 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def _require_image(self) -> RadioImage:
         """Return the loaded image.
 
+        Returns:
+            RadioImage: The parsed clone image.
+
         Raises:
             RadioError: If no image is loaded.
         """
@@ -5653,6 +6291,12 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         """Return memory ``number`` (1-990) as a CHIRP ``Memory``.
 
         Results are cached until the memory or the settings change.
+
+        Args:
+            number: Memory number, 1-990 (slot ``number - 1``).
+
+        Returns:
+            chirp_common.Memory: The memory, from the cache when available.
 
         Raises:
             RadioError: If no image is loaded or ``number`` is out of range.
@@ -5670,8 +6314,19 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def set_memory(self, mem):  # type: ignore[override]
         """Store a CHIRP ``Memory`` in the image.
 
-        The incoming object is not modified (CHIRP freezes it); the sanitised
-        result is cached and returned by later :meth:`get_memory` calls.
+        The sanitised result is cached and returned by later
+        :meth:`get_memory` calls.
+
+        Warning:
+            Known issue: for a DTCS memory whose TX code is 0, ``mem.tmode``
+            is set to ``""`` (see :meth:`_update_tones_from_memory`), so the
+            caller's object is modified. CHIRP's memory editor passes a
+            ``FrozenMemory``; there this logs an "Illegal set" warning (or
+            raises in strict mode). :class:`RT950ProZoneRadio` is not
+            affected because it passes a copy.
+
+        Args:
+            mem: The CHIRP ``Memory`` to store; ``mem.number`` is 1-990.
 
         Raises:
             RadioError: If no image is loaded or the number is out of range.
@@ -5681,8 +6336,8 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             raise errors.RadioError(f"Memory index {mem.number} out of range")
         channel = image.channels[mem.number - 1]
         self._apply_memory_to_channel(mem, channel)
-        # Do not write back into ``mem`` (CHIRP freezes it); the cache holds
-        # the sanitised version that get_memory() returns from now on.
+        # The cache holds the sanitised version that get_memory() returns
+        # from now on (mem itself is only changed in the DTCS-code-0 case).
         sanitized = self._channel_to_memory(mem.number, channel)
         self._memory_cache[mem.number] = sanitized
     # ------------------------------------------------------------------
@@ -5726,6 +6381,10 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
 
         Equal or missing TX gives simplex; otherwise ``+`` or ``-`` with the
         difference as offset.
+
+        Args:
+            mem: The CHIRP ``Memory`` to update (``duplex``, ``offset`` in Hz).
+            channel: The channel record providing ``rx_hz`` and ``tx_hz``.
         """
         if channel.tx_hz is None or channel.tx_hz == channel.rx_hz:
             mem.duplex = ""
@@ -5752,8 +6411,15 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         Warning:
             Known issue: the radio's inverted polarity is ``I`` while CHIRP uses
             ``R``; an inverted code yields a polarity such as ``"IN"`` that
-            CHIRP does not accept. Mixed CTCSS/DCS and RX-only tones are not
-            representable without CHIRP's ``Cross`` mode.
+            CHIRP does not accept. Without ``Cross`` mode some combinations
+            are lossy: different TX/RX CTCSS become ``TSQL`` with the TX tone
+            for both; RX-only CTCSS becomes no tone; RX-only DCS becomes
+            ``DTCS`` with the RX code also used for TX; TX DCS with RX CTCSS
+            loses the RX tone.
+
+        Args:
+            mem: The CHIRP ``Memory`` to update (``tmode``, tones, DCS fields).
+            channel: The channel record providing ``tx_tone`` and ``rx_tone``.
         """
         tx = channel.tx_tone
         rx = channel.rx_tone
@@ -5802,9 +6468,17 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def _apply_memory_to_channel(self, mem, channel: ChannelRecord) -> None:
         """Copy a CHIRP ``Memory`` into a channel record.
 
-        Applies the radio's band rules: 118-137 MHz is forced to AM with TX
-        disabled, 18-64 MHz is forced to FM. Learn-FHSS and the FHSS code are
-        cleared; scrambler and encryption come from the memory's extras.
+        An empty memory clears ``rx_hz``, ``tx_hz`` and ``name`` only.
+        Otherwise frequencies, name, tones, mode, power (unchanged if the
+        label is unknown) and skip are copied. Band rules: 118-137 MHz is
+        forced to AM, wide, with ``tx_enabled`` cleared; 18-64 MHz is forced
+        to FM. ``tx_enabled`` is never set back to True. Learn-FHSS and the
+        FHSS code are cleared. Scrambler (0-8) and encryption (0-2) come from
+        the memory's extras; missing or out-of-range values become 0.
+
+        Warning:
+            Known issue: the extras offer encryption 0-3, but 3 is reset to 0
+            here.
 
         Args:
             mem: The CHIRP memory.
@@ -5882,16 +6556,24 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         channel.scan_add = mem.skip != "S"
 
     def _update_tones_from_memory(self, mem, channel: ChannelRecord) -> None:
-        # Normalise any invalid DTCS entries (e.g., code 000 from CSV/UI)
         """Translate CHIRP tone fields into the channel's TX/RX tones.
 
-        A DTCS memory with code 0 is treated as no tone.
+        A DTCS memory whose TX code (``dtcs``) is 0 is treated as no tone
+        (``mem.tmode`` is set to ``""``, which modifies ``mem``). An RX code
+        of 0 falls back to the TX code. ``TSQL`` uses ``rtone`` for TX and
+        ``ctone`` for RX, each falling back to the other.
 
         Warning:
             Known issue: CHIRP's reverse polarity ``R`` is passed on unchanged;
             the radio's list only knows ``N`` and ``I``, so encoding such a tone
             raises ``ValueError``.
+
+        Args:
+            mem: The CHIRP ``Memory`` to read; ``tmode`` is cleared for a DTCS
+                code of 0.
+            channel: The channel record whose ``tx_tone``/``rx_tone`` are replaced.
         """
+        # Normalise any invalid DTCS entries (e.g., code 000 from CSV/UI)
         if getattr(mem, "tmode", "") == "DTCS":
             tx_code = getattr(mem, "dtcs", 0) or 0
             rx_code = getattr(mem, "rx_dtcs", tx_code) or tx_code
@@ -5940,17 +6622,32 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
             zone: Zone number, 1-10.
         """
         self._parent = parent
+        """The radio that owns the image and does all reading and writing."""
         self._zone = zone
+        """Zone number, 1-10."""
         self._first = (zone - 1) * ZONE_SIZE
-        # CHIRP shows VARIANT as the tab title.
+        """Offset added to a zone memory number (1-99) to get the parent's
+        memory number: ``(zone - 1) * 99``."""
         self.VARIANT = _zone_label(  # pylint: disable=invalid-name
             parent._image, zone)
+        """Tab title suffix shown by CHIRP (``"1 VHF-LOCAL"``, or ``"Zone 1"``
+        when unnamed); fixed when the sub-device is created."""
+        # The attributes below are normally set by CHIRP's constructor,
+        # which is deliberately not called (see above).
         self.pipe = None
+        """No serial port of its own (CHIRP attribute); the parent talks to
+        the radio."""
         self._mmap = None
+        """No memory map of its own (CHIRP attribute); see :meth:`get_mmap`."""
         self._memobj = None
+        """No raw memory view of its own (CHIRP attribute)."""
         self._metadata = {}
+        """Empty metadata (CHIRP attribute); CHIRP replaces it with the
+        parent's ``_metadata[VARIANT]`` via ``link_device_metadata``."""
         self._memory_cache = parent._memory_cache
+        """The parent's memory cache, shared so both views stay in step."""
         self.errors = []
+        """Error list that CHIRP expects on every radio object (CHIRP attribute)."""
 
     @property
     def _image(self):  # type: ignore[override]
@@ -5959,11 +6656,20 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
 
     @_image.setter
     def _image(self, value):
-        """Ignore assignments; the image is owned by the parent radio."""
+        """Ignore assignments; the image is owned by the parent radio.
+
+        Args:
+            value: Assigned value; discarded.
+        """
         del value
 
     def get_features(self):  # type: ignore[override]
-        """Return the parent's features limited to one zone (memories 1-99)."""
+        """Return the parent's features limited to one zone (memories 1-99).
+
+        Returns:
+            chirp_common.RadioFeatures: The parent's features with memory bounds
+            1-99 and no sub-devices or settings.
+        """
         rf = super().get_features()
         rf.memory_bounds = (1, ZONE_SIZE)
         rf.has_sub_devices = False
@@ -5971,14 +6677,25 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
         return rf
 
     def get_sub_devices(self):  # type: ignore[override]
-        """Return no sub-devices; a zone has no zones of its own."""
+        """Return no sub-devices; a zone has no zones of its own.
+
+        Returns:
+            list: An empty list.
+        """
         return []
 
     def get_memory(self, number: int):  # type: ignore[override]
         """Return memory ``number`` (1-99) of this zone.
 
+        Args:
+            number: Memory number within the zone, 1-99.
+
+        Returns:
+            chirp_common.Memory: A copy of the parent's memory, renumbered to
+            ``number``.
+
         Raises:
-            RadioError: If ``number`` is out of range.
+            RadioError: If ``number`` is out of range or no image is loaded.
         """
         if not 1 <= number <= ZONE_SIZE:
             raise errors.RadioError(f"Memory {number} out of range 1-{ZONE_SIZE}")
@@ -5989,8 +6706,11 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
     def set_memory(self, mem):  # type: ignore[override]
         """Store ``mem`` (numbered 1-99) in this zone via the parent.
 
+        Args:
+            mem: The CHIRP ``Memory`` to store; it is copied, not modified.
+
         Raises:
-            RadioError: If the number is out of range.
+            RadioError: If the number is out of range or no image is loaded.
         """
         if not 1 <= mem.number <= ZONE_SIZE:
             raise errors.RadioError(f"Memory {mem.number} out of range 1-{ZONE_SIZE}")
@@ -6000,11 +6720,22 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
         self._parent.set_memory(glob)
 
     def get_mmap(self):  # type: ignore[override]
-        """Return the parent's memory map."""
+        """Return the parent's memory map.
+
+        Returns:
+            memmap.MemoryMapBytes: The result of the parent's :meth:`get_mmap`.
+        """
         return self._parent.get_mmap()
 
     def save_mmap(self, filename):  # type: ignore[override]
-        """Save the parent's image."""
+        """Save the parent's image.
+
+        Args:
+            filename: Destination ``.img`` file.
+
+        Returns:
+            None: The parent's :meth:`save_mmap` returns nothing.
+        """
         return self._parent.save_mmap(filename)
 
 

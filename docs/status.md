@@ -16,7 +16,7 @@ Base: experimental driver by 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @254d
 - Behaviour demonstrably unchanged: an AST diff without docstrings shows only intended changes; an old/new comparison through real CHIRP (read, memories, set_memory, zones, settings, write plan) is byte-identical.
 - Fixed latent bug: `get_logger` did not exist (NameError for a transport without a logger).
 - CHIRP's own style check (tools/cpep8.py, pep8/flake8) uses 79 characters; reformat before a PR.
-- Automatic documentation: the GitHub Action `.github/workflows/docs.yml` builds the API documentation with pdoc (Google style, template in `docs/templates/`) and publishes it on GitHub Pages (Settings → Pages → Source: GitHub Actions): <https://pe1hvh.github.io/chirp_radtel_rt950pro>.
+- Automatic documentation: the GitHub Action `.github/workflows/docs.yml` checks the docstrings (pydocstyle, pydoclint) and builds the documentation with `docs/build.py` (pdoc, Google style, grouped by driver layer, template in `docs/templates/`) and publishes it on GitHub Pages (Settings → Pages → Source: GitHub Actions): <https://pe1hvh.github.io/chirp_radtel_rt950pro>.
 
 ## Confirmed on the real radio (PE1HVH)
 | Address / cmd | Content | Read | Write |
@@ -52,6 +52,13 @@ DCS list in the driver: 210 codes; index 1–105 = N, 106–210 = I (polarity "I
 3. Tones without CHIRP "Cross": RX-only tone and mixed CTCSS/DCS are lost when such a channel is edited.
 4. Settings apply turns "not set" (0xFF) into a default value (e.g. APRS → write_aprs becomes True after merely opening and applying).
 5. `_ToneInfo` is unused.
+6. VFO power is always decoded as HIGH: `parse_vfo_section` uses `min(raw, PowerLevel.HIGH.value)` (= 0). Editing any other VFO field writes High back to byte 16. Fix: `PowerLevel.LOW.value`, as in `ChannelRecord.from_bytes`.
+7. `encode_modulation_sections` writes unset fields (`None`, parsed from 0x0000/0xFFFF and 0x00/0xFF) as 0x00, so an all-0xFF parameter block changes 144 bytes without any edit; the block is part of every upload.
+8. `RT950ProRadio.set_memory` modifies CHIRP's `FrozenMemory` for a DTCS memory with TX code 0 (`mem.tmode = ""`); fix: work on `mem.dupe()`.
+9. Range/mask mismatches: `key_side1/2_short/long` allow 0-31 but are stored in 4 bits; APRS `timed_beacon_time` (0-60) and `radio_symbol` (0-99) likewise; channel encryption 3 is offered in CHIRP but reset to 0.
+10. `encode_aprs_section` normalises out-of-range stored values without an edit; an edited channel record loses the high nibbles of bytes 12-13.
+
+Bugs 6-10 were found in the independent docstring review of 2026-10-18 and confirmed with tests; they are documented as Warnings in the code.
 
 ## Route to official CHIRP
 - PR on kk7ds/chirp: tests pass, rebased, `Fixes/Related to #12180`, test image `tests/images/Radtel_RT-950_Pro.img`, MemoryMapBytes, files GPLv3 or without licence text.
@@ -60,7 +67,7 @@ DCS list in the driver: 210 codes; index 1–105 = N, 106–210 = I (polarity "I
 - Proposal drafted in English for issue #12180 (questions: subclass wanted?, review by Fred?, test image with neutral channels ok?).
 
 ## Open
-- Fix known bugs 1–4 above (own commit, with test).
+- Fix known bugs 1–4 and 6–10 above (own commit, with tests).
 - Compare the handshake (PROGRAMBT9000U + XOR) with the RT-920 protocol.
 - Maximum zone name length (slot 16 bytes, driver writes max. 10).
 - Add firmware/layout detection (960 vs 990) before writing.

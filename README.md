@@ -99,18 +99,29 @@ scan the driver directory; use option 1 there.
 
 ## Documentation
 
-The API documentation of the driver is published at
-**<https://pe1hvh.github.io/chirp_radtel_rt950pro>**. It covers every class,
-function and constant, including the byte layouts of the channel record, VFO
-entry, modulation block and clone protocol.
+The technical documentation of the driver is published at
+**<https://pe1hvh.github.io/chirp_radtel_rt950pro>**. It describes every
+class, function, method, field and constant, public and private, with their
+parameters and return values, including the byte layouts of the channel
+record, VFO entry, modulation block and clone protocol.
 
-It is generated from the Google-style docstrings in `radtel_rt950pro.py` with
-[pdoc](https://pdoc.dev) and rebuilt by GitHub Actions
-(`.github/workflows/docs.yml`) on every push to `main`. To build it locally:
+The menu follows the program structure: the six driver layers (channel
+records → settings sections → settings API → image → transport → CHIRP
+integration), their sections, and per class the constructor, fields,
+properties and methods. Public objects have an open lock, private ones a
+closed lock (yellow: methods and functions; orange: classes, properties,
+fields and constants). "Hide private" shows only the public API.
+
+The pages are generated from the Google-style docstrings in
+`radtel_rt950pro.py` by `docs/build.py` (pdoc plus the layer grouping) and
+rebuilt by GitHub Actions (`.github/workflows/docs.yml`) on every push to
+`main`. The workflow first checks that every parameter, return value and
+yield is documented (pydocstyle and pydoclint) and stops if not. To build it
+locally:
 
 ```
-pip install pdoc
-PYTHONPATH=. pdoc --docformat google -t docs/templates radtel_rt950pro
+pip install "pdoc>=16,<17"
+python docs/build.py        # HTML in ./site
 ```
 
 ## Repository layout
@@ -121,7 +132,8 @@ PYTHONPATH=. pdoc --docformat google -t docs/templates radtel_rt950pro
 | `docs/memory-map.md` | confirmed memory map |
 | `docs/protocol.md` | clone protocol and timing |
 | `docs/status.md` | development status, sources, risks and known bugs |
-| `docs/templates/` | pdoc template for the API documentation |
+| `docs/build.py` | builds the documentation, grouped by driver layer |
+| `docs/templates/` | pdoc template: menu, locks, layer headings |
 | `.github/workflows/docs.yml` | builds and publishes the API documentation |
 | `tools/find_zone_names.py` | read-only scan of the radio for known text |
 | `tools/make_sample_image.py` | sample `.img` with two invented zones |

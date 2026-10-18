@@ -1,108 +1,284 @@
 {#- pdoc template override for the Radtel RT-950 Pro driver documentation.
 
-    - Project title instead of "API Documentation".
-    - Left menu grouped into collapsible sections (Classes, Functions,
-      Variables); each class can be expanded to show its members.
+    Used by docs/build.py, which provides two globals:
+      layers  the module objects grouped by driver layer and section
+              (see build_tree() in docs/build.py)
+      shown   qualified names of every object that is documented
+
+    Menu and page follow the program structure: layer -> section ->
+    classes / functions / constants; inside a class: constructor, fields,
+    properties, methods. Within each group public objects come first
+    (open lock), private ones after a dashed line (closed lock).
+    Lock colour: yellow for methods and functions, orange for everything
+    else (classes, properties, fields, constants).
 -#}
 {% extends "default/module.html.jinja2" %}
 
 {% block title %}Radtel RT-950 Pro driver for CHIRP{% endblock %}
 
-{% macro nav_class_members(members) %}
-    <ul class="memberlist">
-        {% for m in members if is_public(m) | trim %}
-            <li>
-                {% if m.kind == "class" %}
-                    {{ nav_class(m) }}
-                {% elif m.name == "__init__" %}
-                    <a class="function" href="#{{ m.qualname }}">{{ m.qualname.split(".")[-2] }}</a>
-                {% else %}
-                    <a class="{{ m.kind }}" href="#{{ m.qualname }}">{{ m.name }}</a>
-                {% endif %}
-            </li>
+{#- Only objects selected by docs/build.py are documented (and linkable). -#}
+{% macro is_public(doc) -%}
+    {%- if doc.kind == "module" or (doc.qualname or doc.name) in shown -%}true{%- endif -%}
+{%- endmacro %}
+
+{#- Lock icon. Open shackle swung out to the right = public; closed = private. -#}
+{% macro lock(kind, public) -%}
+    {%- set color = "#E0A800" if kind in ("method", "function", "constructor") else "#E8710A" -%}
+    {%- set label = ("Public " if public else "Private ") ~ kind -%}
+    <svg class="lk" viewBox="0 0 19 16" width="19" height="16" role="img" aria-label="{{ label }}"><title>{{ label }}</title>
+        {%- if public -%}
+        <path d="M10.2 8.5V5.2a3.3 3.3 0 0 1 6.6 0v1.8" fill="none" stroke="{{ color }}" stroke-width="1.9" stroke-linecap="round"/>
+        {%- else -%}
+        <path d="M3.7 8.5V5.6a3.3 3.3 0 0 1 6.6 0v2.9" fill="none" stroke="{{ color }}" stroke-width="1.9"/>
+        {%- endif -%}
+        <rect x="1.5" y="8" width="11" height="7" rx="1.5" fill="{{ color }}"/></svg>
+{%- endmacro %}
+
+{% macro vis(public) %}{{ "public" if public else "private" }}{% endmacro %}
+
+{#- Hover text of a count, e.g. "6 classes, 6 functions, 2 constants (8 private)". -#}
+{% macro count_title(c) -%}
+    {%- set parts = [] -%}
+    {%- for key, one, many in [("class", "class", "classes"), ("function", "function", "functions"), ("constant", "constant", "constants")] -%}
+        {%- if c[key] -%}{%- set _ = parts.append(c[key] ~ " " ~ (one if c[key] == 1 else many)) -%}{%- endif -%}
+    {%- endfor -%}
+    {{ parts | join(", ") }} ({{ c.private }} private)
+{%- endmacro %}
+
+{% macro counts_of(items) -%}
+    {%- set c = {"class": 0, "function": 0, "constant": 0, "private": 0} -%}
+    {%- for i in items -%}
+        {%- set _ = c.update({i.kind: c[i.kind] + 1}) -%}
+        {%- if not i.public %}{% set _ = c.update({"private": c.private + 1}) %}{% endif -%}
+    {%- endfor -%}
+    {{ count_title(c) }}
+{%- endmacro %}
+
+{% macro label(doc, kind) -%}
+    {%- if kind == "constructor" -%}{{ doc.qualname.split(".")[-2] }}()
+    {%- elif kind in ("method", "function") -%}{{ doc.name }}()
+    {%- else -%}{{ doc.name }}{%- endif -%}
+{%- endmacro %}
+
+{#- Members of a class that are documented, as (member, doc) pairs. -#}
+{% macro member_rows(cls, members) -%}
+    {%- for m in members -%}
+        {%- set d = module.get(cls.name ~ "." ~ m.name) -%}
+        {%- if d -%}
+            <li class="{{ vis(m.public) }}"><a href="#{{ d.qualname }}">{{ lock(m.kind, m.public) }}<span>{{ label(d, m.kind) }}</span></a></li>
+        {%- endif -%}
+    {%- endfor -%}
+{%- endmacro %}
+
+{% macro split_rows(cls, members) -%}
+    {%- set pub = members | selectattr("public") | list -%}
+    {%- set pri = members | rejectattr("public") | list -%}
+    {{ member_rows(cls, pub) }}
+    {%- if pub and pri %}<li class="sep private" aria-hidden="true"></li>{% endif -%}
+    {{ member_rows(cls, pri) }}
+{%- endmacro %}
+
+{% set MEMBER_GROUPS = [("constructor", "Constructor"), ("field", "Fields"), ("property", "Properties"), ("method", "Methods")] %}
+
+{% macro nav_class(item) %}
+    {% set doc = module.get(item.name) %}
+    <details class="nav-class">
+        <summary><a href="#{{ item.name }}">{{ lock("class", item.public) }}<span class="cn">{{ item.name }}</span></a></summary>
+        {% for kind, title in MEMBER_GROUPS %}
+            {% set ms = item.members | selectattr("kind", "equalto", kind) | list %}
+            {% if ms %}
+                <div class="kh">{{ title }}</div>
+                <ul>{{ split_rows(item, ms) }}</ul>
+            {% endif %}
         {% endfor %}
-    </ul>
+    </details>
 {% endmacro %}
 
-{% macro nav_class(m) %}
-    {% if m.own_members %}
-        <details class="nav-class">
-            <summary><a class="class" href="#{{ m.qualname }}">{{ m.name }}</a></summary>
-            {{ nav_class_members(m.own_members) }}
-        </details>
-    {% else %}
-        <a class="class" href="#{{ m.qualname }}">{{ m.name }}</a>
+{% macro module_rows(items) -%}
+    {%- for i in items -%}
+        {%- set d = module.get(i.name) -%}
+        {%- if d -%}
+            <li class="{{ vis(i.public) }}"><a href="#{{ d.qualname }}">{{ lock(i.kind, i.public) }}<span>{{ label(d, i.kind) }}</span></a></li>
+        {%- endif -%}
+    {%- endfor -%}
+{%- endmacro %}
+
+{% macro nav_items(items) %}
+    {% set classes = items | selectattr("kind", "equalto", "class") | list %}
+    {% if classes %}
+        <div class="kh">Classes</div>
+        <ul>
+            {% for c in classes %}
+                {% if loop.previtem and loop.previtem.public and not c.public %}<li class="sep private" aria-hidden="true"></li>{% endif %}
+                <li class="{{ vis(c.public) }}">{{ nav_class(c) }}</li>
+            {% endfor %}
+        </ul>
     {% endif %}
-{% endmacro %}
-
-{% macro nav_group(label, items) %}
-    {% if items %}
-        <details class="nav-group" open>
-            <summary>{{ label }} <span class="nav-count">{{ items | length }}</span></summary>
-            <ul class="memberlist">
-                {% for m in items %}
-                    <li>
-                        {% if m.kind == "class" %}
-                            {{ nav_class(m) }}
-                        {% else %}
-                            <a class="{{ m.kind }}" href="#{{ m.qualname }}">{{ m.name }}</a>
-                        {% endif %}
-                    </li>
-                {% endfor %}
+    {% for kind, title in [("function", "Functions"), ("constant", "Constants")] %}
+        {% set ms = items | selectattr("kind", "equalto", kind) | list %}
+        {% if ms %}
+            {% set pub = ms | selectattr("public") | list %}
+            {% set pri = ms | rejectattr("public") | list %}
+            <div class="kh">{{ title }}</div>
+            <ul>
+                {{ module_rows(pub) }}
+                {% if pub and pri %}<li class="sep private" aria-hidden="true"></li>{% endif %}
+                {{ module_rows(pri) }}
             </ul>
-        </details>
-    {% endif %}
+        {% endif %}
+    {% endfor %}
 {% endmacro %}
 
 {% block nav_members %}
-    {% if module.members %}
-        {% set public = [] %}
-        {% for m in module.members.values() if is_public(m) | trim %}
-            {% set _ = public.append(m) %}
-        {% endfor %}
-        <h2>Radtel RT-950 Pro driver for CHIRP</h2>
-        <div class="nav-tools">
-            <button type="button" data-nav="open">Expand all</button>
-            <button type="button" data-nav="close">Collapse all</button>
+    <h2>Radtel RT-950 Pro driver for CHIRP</h2>
+    <div class="nav-tools">
+        <button type="button" data-nav="open">Expand all</button>
+        <button type="button" data-nav="close">Collapse all</button>
+        <button type="button" data-nav="private" aria-pressed="false">Hide private</button>
+    </div>
+    <div class="legend">
+        <span>{{ lock("method", true) }}public</span>
+        <span>{{ lock("method", false) }}private</span>
+    </div>
+    <div class="legend">
+        <span><i class="sw sw-call"></i>method / function</span>
+        <span><i class="sw sw-other"></i>class / property / field / constant</span>
+    </div>
+    <h3 class="nav-heading">Driver layers</h3>
+    <p class="nav-sub">Program structure, in source order</p>
+    {% for layer in layers %}
+        <details class="nav-layer">
+            <summary><a href="#layer-{{ layer.number }}">{{ layer.short }}</a>
+                <span class="cnt" title="{{ count_title(layer.counts) }}">{{ layer.counts.total }}</span></summary>
+            {% for section in layer.sections %}
+                {% if section.title %}
+                    <details class="nav-section">
+                        <summary><span>{{ section.title }}</span>
+                            <span class="cnt" title="{{ counts_of(section["items"]) }}">{{ section["items"] | length }}</span></summary>
+                        {{ nav_items(section["items"]) }}
+                    </details>
+                {% else %}
+                    {{ nav_items(section["items"]) }}
+                {% endif %}
+            {% endfor %}
+        </details>
+    {% endfor %}
+{% endblock %}
+
+{#- pdoc's member() with the lock icon in the heading. -#}
+{% macro locked_member(doc, kind, public) %}
+    {{- view_source_state(doc) -}}
+    <div class="attr {{ doc.kind }}">
+        {{ lock(kind, public) }}
+        {% if doc.kind == "class" %}
+            {{ class(doc) }}
+        {% elif doc.kind == "function" %}
+            {{ function(doc) }}
+        {% else %}
+            {{ variable(doc) }}
+        {% endif %}
+        {{ view_source_button(doc) }}
+    </div>
+    <a class="headerlink" href="#{{ doc.qualname }}"></a>
+    {{ view_source_code(doc) }}
+    {{ docstring(doc) }}
+{% endmacro %}
+
+{% macro content_class_members(item) %}
+    {% for kind, title in MEMBER_GROUPS %}
+        {% set ms = item.members | selectattr("kind", "equalto", kind) | list %}
+        {% set ordered = (ms | selectattr("public") | list) + (ms | rejectattr("public") | list) %}
+        {% if ordered %}
+            <div class="member-group">{{ title }}</div>
+            {% for m in ordered %}
+                {% set d = module.get(item.name ~ "." ~ m.name) %}
+                {% if d %}
+                    <div id="{{ d.qualname }}" class="classattr {{ vis(m.public) }}">
+                        {{ locked_member(d, m.kind, m.public) }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+{% endmacro %}
+
+{% block module_contents %}
+    {% for layer in layers %}
+        <div class="layerhead" id="layer-{{ layer.number }}">
+            <h2>{{ layer.title }}</h2>
+            {% if layer.description %}<p>{{ layer.description }}</p>{% endif %}
         </div>
-        {{ nav_group("Classes", public | selectattr("kind", "equalto", "class") | list) }}
-        {{ nav_group("Functions", public | selectattr("kind", "equalto", "function") | list) }}
-        {{ nav_group("Variables", public | selectattr("kind", "equalto", "variable") | list) }}
-    {% endif %}
+        {% for section in layer.sections %}
+            {% if section.title %}<h3 class="sectionhead">{{ section.title }}</h3>{% endif %}
+            {% for item in section["items"] %}
+                {% set doc = module.get(item.name) %}
+                {% if doc %}
+                    <section id="{{ doc.qualname }}" class="{{ vis(item.public) }}">
+                        {{ locked_member(doc, item.kind, item.public) }}
+                        {% if item.kind == "class" %}{{ content_class_members(item) }}{% endif %}
+                    </section>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+    {% endfor %}
 {% endblock %}
 
 {% block style %}
     {{ super() }}
     <style>
-        nav details > summary { cursor: pointer; list-style: none; }
-        nav details > summary::-webkit-details-marker { display: none; }
-        nav details > summary::before {
-            content: "\25B8"; display: inline-block; width: 1em;
-            transition: transform .15s; color: var(--muted, #888);
-        }
-        nav details[open] > summary::before { transform: rotate(90deg); }
-        nav .nav-group > summary { font-weight: bold; margin: .6rem 0 .2rem; }
-        nav.pdoc .nav-group .memberlist { margin-left: 0; padding-left: .6rem; }
-        nav.pdoc .nav-group li a { padding: .15rem 0 .15rem 1.2rem; }
-        nav.pdoc .nav-group summary > a { display: inline; padding: .15rem 0; }
-        nav.pdoc .nav-group .class:before { content: none; }
-        nav.pdoc .nav-class > .memberlist { padding-left: 1.2rem; }
-        nav .nav-count { font-weight: normal; color: var(--muted, #888); font-size: .85em; }
-        nav .nav-tools { display: flex; gap: .4rem; margin-bottom: .4rem; }
-        nav .nav-tools button {
-            font-size: .8em; padding: .15rem .5rem; cursor: pointer;
-            border: 1px solid var(--accent2, #ccc); border-radius: 4px;
-            background: transparent; color: inherit;
-        }
+        :root { --lock-call: #E0A800; --lock-other: #E8710A; }
+        nav.pdoc ul { list-style: none; margin: 0; padding-left: .9rem; }
+        nav.pdoc li a { display: flex; align-items: center; gap: .4rem; padding: .12rem .3rem; font-size: .92em; }
+        nav.pdoc li.private > a span, nav.pdoc li.private .cn { color: var(--muted); }
+        nav.pdoc li.sep { border-top: 1px dashed var(--accent2); margin: .25rem .6rem .25rem 1.4rem; height: 0; }
+        nav.pdoc li.sep:hover { background: none; }
+        nav.pdoc details > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .35rem; padding: .12rem 0; }
+        nav.pdoc details > summary::-webkit-details-marker { display: none; }
+        nav.pdoc details > summary::before { content: "\25B8"; color: var(--muted); width: .8em; flex: none; transition: transform .15s; }
+        nav.pdoc details[open] > summary::before { transform: rotate(90deg); }
+        nav.pdoc details > summary > a { display: flex; align-items: center; gap: .4rem; padding: 0; }
+        nav.pdoc .nav-heading { margin: .9rem 0 0; font-size: 1.05em; }
+        nav.pdoc .nav-sub { margin: 0 0 .3rem; font-size: .78em; color: var(--muted); }
+        nav.pdoc .nav-layer > summary { font-weight: 700; margin-top: .5rem; font-size: 1.02em; }
+        nav.pdoc .nav-layer { border-left: 2px solid transparent; }
+        nav.pdoc .nav-layer[open] { border-left-color: var(--accent2); }
+        nav.pdoc .nav-layer > *:not(summary) { margin-left: .5rem; }
+        nav.pdoc .nav-section > summary { font-style: italic; margin-top: .2rem; align-items: flex-start; }
+        nav.pdoc .nav-section > *:not(summary) { margin-left: .6rem; }
+        nav.pdoc .nav-class > *:not(summary) { margin-left: 1.2rem; }
+        nav.pdoc .kh { font-size: .72em; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: .35rem 0 .05rem .9rem; }
+        nav.pdoc .nav-class .kh { margin-left: .2rem; }
+        nav.pdoc .cnt { font-weight: 400; color: var(--muted); font-size: .8em; white-space: nowrap; cursor: help; }
+        nav.pdoc .cn { font-weight: 500; }
+        nav.pdoc a.current { background: var(--nav-hover); border-radius: 3px; }
+        nav.pdoc .nav-tools { display: flex; gap: .3rem; flex-wrap: wrap; margin: .3rem 0; }
+        nav.pdoc .nav-tools button { font-size: .75em; padding: .1rem .45rem; border: 1px solid var(--accent2); border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+        nav.pdoc .nav-tools button[aria-pressed="true"] { background: var(--accent2); }
+        nav.pdoc .legend { font-size: .75em; color: var(--muted); display: flex; flex-wrap: wrap; gap: .2rem .9rem; margin-bottom: .15rem; }
+        nav.pdoc .legend span { display: inline-flex; align-items: center; gap: .25rem; }
+        nav.pdoc .sw { display: inline-block; width: .75em; height: .75em; border-radius: 2px; }
+        nav.pdoc .sw-call { background: var(--lock-call); }
+        nav.pdoc .sw-other { background: var(--lock-other); }
+        .lk { flex: none; }
+        main .attr > .lk { margin-right: .35rem; vertical-align: -2px; }
+        main .layerhead { margin: 2.5rem 0 .6rem; padding: .5rem .8rem; border-left: 4px solid #0066CC; background: var(--accent); }
+        main .layerhead h2 { margin: 0; font-size: 1.3em; }
+        main .layerhead p { margin: .2rem 0 0; color: var(--muted); font-size: .92em; }
+        main .sectionhead { margin: 1.6rem 0 .4rem; font-style: italic; font-weight: 500; color: var(--muted); }
+        main .member-group { margin: 1.2rem 0 .3rem 2rem; font-size: .75em; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+        body.hide-private .private { display: none !important; }
     </style>
 {% endblock %}
 
 {% block content %}
     {{ super() }}
     <script>
-        /* Side menu: "Expand all" / "Collapse all" buttons; a click on a class
-           name also opens its member list; the menu opens the section that
-           holds the current anchor (direct links, back/forward). */
+        /* Side menu behaviour:
+           - "Expand all" / "Collapse all" open or close every group;
+           - "Hide private" hides private objects in menu and page;
+           - a click on a class or layer name also opens its group;
+           - the menu opens the groups that hold the current anchor
+             (direct links, back/forward). */
         (function () {
             var nav = document.querySelector("nav.pdoc");
             if (!nav) { return; }
@@ -114,7 +290,14 @@
                 }
                 var b = ev.target.closest("button[data-nav]");
                 if (!b) { return; }
-                var open = b.getAttribute("data-nav") === "open";
+                var action = b.getAttribute("data-nav");
+                if (action === "private") {
+                    var hide = document.body.classList.toggle("hide-private");
+                    b.setAttribute("aria-pressed", hide ? "true" : "false");
+                    b.textContent = hide ? "Show private" : "Hide private";
+                    return;
+                }
+                var open = action === "open";
                 nav.querySelectorAll("details").forEach(function (d) { d.open = open; });
             });
             function reveal() {
@@ -125,6 +308,9 @@
                     for (var d = a.closest("details"); d; d = d.parentElement.closest("details")) {
                         d.open = true;
                     }
+                    nav.querySelectorAll("a.current").forEach(function (c) { c.classList.remove("current"); });
+                    a.classList.add("current");
+                    a.scrollIntoView({block: "nearest"});
                 });
             }
             window.addEventListener("hashchange", reveal);
