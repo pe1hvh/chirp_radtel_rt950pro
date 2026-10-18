@@ -2,7 +2,7 @@
 
 A [CHIRP](https://chirpmyradio.com) driver for the Radtel RT-950 Pro with full
 support for the radio's **10 zones × 99 channels**, including zone names.
-
+dit is een test
 **Documentation:** <https://pe1hvh.github.io/chirp_radtel_rt950pro>
 
 > **Experimental.** A driver bug can mis-program your radio. Always keep a
