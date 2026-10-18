@@ -1,0 +1,9 @@
+{#- pdoc template override: project title instead of "API Documentation". -#}
+{% extends "default/module.html.jinja2" %}
+{% block title %}Radtel RT-950 Pro driver for CHIRP{% endblock %}
+{% block nav_members %}
+    {% if module.members %}
+        <h2>Radtel RT-950 Pro driver for CHIRP</h2>
+        {{ nav_members(module.members.values()) }}
+    {% endif %}
+{% endblock %}
