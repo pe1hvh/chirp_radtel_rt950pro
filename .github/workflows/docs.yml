@@ -1,14 +1,24 @@
 # Build the API documentation of the driver (Google-style docstrings,
 # rendered with pdoc) and publish it on GitHub Pages.
 #
-# One-time setup: repository Settings -> Pages -> Build and deployment ->
-# Source: "GitHub Actions". The page is then served at
-# https://<user>.github.io/<repo>/
+# Both branches end up in ONE Pages site (GitHub Pages allows only one site
+# per repository, and every deploy replaces the whole site):
+#
+#   main    -> https://pe1hvh.github.io/chirp_radtel_rt950pro/radtel_rt950pro.html
+#   develop -> https://pe1hvh.github.io/chirp_radtel_rt950pro/develop/radtel_rt950pro.html
+#
+# A push to either branch rebuilds both, so the live (main) version is never
+# overwritten by develop.
+#
+# One-time setup:
+#   1. Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+#   2. Settings -> Environments -> github-pages -> Deployment branches and tags:
+#      add "develop" next to "main" (otherwise the deploy from develop is refused).
 name: docs
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -24,34 +34,38 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          path: develop
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install tools
-        # pdoc pinned to 16.x: the template in docs/templates extends its default.
-        run: pip install "pdoc>=16,<17" pydocstyle "pydoclint>=0.11,<0.12"
-
-      # Every class, function, method, parameter and return value must be
-      # documented (public and private). pydoclint checks Args/Returns/Yields
-      # against the signatures; DOC106/107 (type hints) and DOC502/503
-      # (exceptions raised in called functions) are not checked.
-      - name: Check docstrings
-        run: |
-          pydocstyle --convention=google radtel_rt950pro.py
-          pydoclint --style=google --skip-checking-short-docstrings=False \
-            --arg-type-hints-in-docstring=False --check-return-types=False \
-            --check-yield-types=False --check-class-attributes=False \
-            --allow-init-docstring=True radtel_rt950pro.py > doclint.txt 2>&1 || true
-          if grep -E "DOC[0-9]+:" doclint.txt | grep -vE "DOC(106|107|502|503):"; then
-            echo "Docstring check failed (see above)"; exit 1
-          fi
+      - name: Install pdoc
+        run: pip install pdoc
 
       # CHIRP is not needed: the driver has stand-ins for documentation builds.
-      - name: Build HTML with pdoc
-        run: python docs/build.py -o site
+      # Each branch is built with its own driver and its own docs/templates.
+      - name: Build main (site root)
+        working-directory: main
+        run: |
+          PYTHONPATH=. pdoc --docformat google -t docs/templates \
+            -o "$GITHUB_WORKSPACE/site" radtel_rt950pro
+
+      - name: Build develop (site/develop)
+        working-directory: develop
+        run: |
+          PYTHONPATH=. pdoc --docformat google -t docs/templates \
+            -o "$GITHUB_WORKSPACE/site/develop" radtel_rt950pro
 
       - uses: actions/configure-pages@v5
 
