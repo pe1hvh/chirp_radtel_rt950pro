@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1778" height="1215" viewBox="0 0 1778 1215" role="img" aria-label="8. Opening a .img file and process_mmap()">
+<defs><marker id="solid" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker><marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#6B7280" stroke-width="1.4"/></marker></defs>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<g transform="translate(-0.0,0)">
+<text x="30.0" y="36.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#0066CC" text-anchor="start" font-weight="bold">8. Opening a .img file and process_mmap()</text>
+<line x1="85.0" y1="94.0" x2="85.0" y2="1195.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="239.2" y1="94.0" x2="239.2" y2="1195.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="568.1" y1="94.0" x2="568.1" y2="1195.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="834.9" y1="94.0" x2="834.9" y2="1195.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1308.7" y1="94.0" x2="1308.7" y2="1195.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<rect x="233.2" y="859.0" width="1155.5" height="312.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
+<path d="M233.2,859.0 h36.7 v12 l-8,8 h-28.7 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
+<text x="240.2" y="873.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">alt</text>
+<text x="277.9" y="873.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">parsed</text>
+<line x1="233.2" y1="1105.0" x2="1388.7" y2="1105.0" stroke="#7A8CA5" stroke-dasharray="6 4" stroke-width="1"/>
+<text x="241.2" y="1121.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">ValueError (too short, invalid BCD, ...)</text>
+<rect x="488.1" y="415.0" width="900.6" height="321.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
+<path d="M488.1,415.0 h36.7 v12 l-8,8 h-28.7 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
+<text x="495.1" y="429.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">alt</text>
+<text x="532.8" y="429.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">len == 35,456 and rt950_layout &gt;= 4</text>
+<line x1="488.1" y1="494.0" x2="1388.7" y2="494.0" stroke="#7A8CA5" stroke-dasharray="6 4" stroke-width="1"/>
+<text x="496.1" y="510.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">len == 35,456, no or older rt950_layout</text>
+<line x1="488.1" y1="569.0" x2="1388.7" y2="569.0" stroke="#7A8CA5" stroke-dasharray="6 4" stroke-width="1"/>
+<text x="496.1" y="585.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">len == 35,200 (990 channels, no zone names)</text>
+<line x1="488.1" y1="644.0" x2="1388.7" y2="644.0" stroke="#7A8CA5" stroke-dasharray="6 4" stroke-width="1"/>
+<text x="496.1" y="660.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">len == 33,152 (old 960-slot driver)</text>
+<text x="162.1" y="130.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">File &gt; Open  x.img</text>
+<line x1="85.0" y1="136.0" x2="239.2" y2="136.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M239.2,158.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="275.2" y="170.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">get_radio_by_image(): _strip_metadata()</text>
+<text x="275.2" y="185.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">match vendor &#x27;Radtel&#x27;, model &#x27;RT-950 Pro&#x27;</text>
+<text x="537.1" y="220.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">DynamicRadioAlias(filename)  (subclass of RT950ProDriver)</text>
+<line x1="239.2" y1="226.0" x2="834.9" y2="226.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M834.9,248.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="260.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">__init__: state first, then super().__init__</text>
+<text x="701.5" y="295.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">CloneModeRadio.__init__(filename)</text>
+<line x1="834.9" y1="301.0" x2="568.1" y2="301.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M568.1,323.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="604.1" y="335.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">load_mmap(): _metadata from file</text>
+<text x="604.1" y="350.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_mmap = MemoryMapBytes(data)</text>
+<text x="701.5" y="385.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">process_mmap()</text>
+<line x1="568.1" y1="391.0" x2="834.9" y2="391.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M834.9,455.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="467.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_zone_names_valid = True</text>
+<path d="M834.9,530.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="542.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">zone-name segment := 0xFF; names not written</text>
+<path d="M834.9,605.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="617.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">append 0x100 bytes 0xFF</text>
+<path d="M834.9,680.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="692.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_legacy_960 = True; insert 0x800 x 0xFF at 0x7800</text>
+<text x="870.9" y="707.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">+ 0x100 x 0xFF zone names</text>
+<text x="1071.8" y="756.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">RadioImage.from_bytes(data)</text>
+<line x1="834.9" y1="762.0" x2="1308.7" y2="762.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M1308.7,784.0 h28 v49.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1344.7" y="796.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">990 x ChannelRecord.from_bytes()</text>
+<text x="1344.7" y="811.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">parse VFO/function/DTMF/modulation/APRS</text>
+<text x="1344.7" y="826.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">parse_zone_names(); keep remainder, channel_extra</text>
+<text x="1071.8" y="903.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">RadioImage</text>
+<line x1="1308.7" y1="909.0" x2="834.9" y2="909.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<path d="M834.9,931.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="943.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_memory_cache.clear(); _parse_memobj()</text>
+<text x="870.9" y="958.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_log_channel_extra()</text>
+<path d="M834.9,989.0 h28 v64.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="870.9" y="1001.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">payload = _build_clone_payload(image)</text>
+<text x="870.9" y="1016.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_aprs_original = APRS block</text>
+<text x="870.9" y="1031.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_high_channels_original = payload[0x7800:0x7C00]</text>
+<text x="870.9" y="1046.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">(on any exception both stay None: nothing optional is written)</text>
+<text x="537.1" y="1081.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">radio object -&gt; ChirpEditorSet (diagram 4)</text>
+<line x1="834.9" y1="1087.0" x2="239.2" y2="1087.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="537.1" y="1145.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">errors.RadioError(&#x27;Failed to parse memory map: ...&#x27;)</text>
+<line x1="834.9" y1="1151.0" x2="239.2" y2="1151.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<rect x="30.0" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="85.0" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">User</text>
+<rect x="173.4" y="54.0" width="131.5" height="40" rx="4" fill="#0066CC"/>
+<text x="239.2" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">chirp.directory</text>
+<rect x="505.8" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="568.1" y="71.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">CloneModeRadio</text>
+<text x="568.1" y="85.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">(CHIRP base)</text>
+<rect x="772.6" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="834.9" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RT950ProDriver</text>
+<rect x="1253.7" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="1308.7" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RadioImage</text>
+</g></svg>

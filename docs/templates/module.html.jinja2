@@ -1,9 +1,16 @@
 {#- pdoc template override for the Radtel RT-950 Pro driver documentation.
 
-    Used by docs/build.py, which provides two globals:
-      layers  the module objects grouped by driver layer and section
-              (see build_tree() in docs/build.py)
-      shown   qualified names of every object that is documented
+    Used by docs/build.py, which provides these globals:
+      layers          the module objects grouped by driver layer and section
+                      (see build_tree() in docs/build.py)
+      shown           qualified names of every object that is documented
+      documents       the design documents rendered from docs/*.md, shown
+                      above the API reference (see render_document())
+      layer_chapters  layer number -> [(anchor, label)] of the design
+                      chapters about that layer (see layer_chapters())
+      api_anchor      anchor of the "API reference" heading
+
+    Page order: module docstring, documents, API reference (layers).
 
     Menu and page follow the program structure: layer -> section ->
     classes / functions / constants; inside a class: constructor, fields,
@@ -144,8 +151,21 @@
         <span><i class="sw sw-call"></i>method / function</span>
         <span><i class="sw sw-other"></i>class / property / field / constant</span>
     </div>
-    <h3 class="nav-heading">Driver layers</h3>
-    <p class="nav-sub">Program structure, in source order</p>
+    <h3 class="nav-heading">Documents</h3>
+    <p class="nav-sub">Design and CHIRP interface</p>
+    {% for d in documents %}
+        <details class="nav-layer nav-doc">
+            <summary><a href="#{{ d.id }}">{{ d.label }}</a>
+                <span class="cnt" title="{{ d.toc | length }} chapters">{{ d.toc | length }}</span></summary>
+            <ul>
+                {% for anchor, text, level in d.toc %}
+                    <li class="toc-{{ level }}"><a href="#{{ anchor }}"><span>{{ text }}</span></a></li>
+                {% endfor %}
+            </ul>
+        </details>
+    {% endfor %}
+    <h3 class="nav-heading"><a href="#{{ api_anchor }}">Driver layers</a></h3>
+    <p class="nav-sub">API reference: program structure, in source order</p>
     {% for layer in layers %}
         <details class="nav-layer">
             <summary><a href="#layer-{{ layer.number }}">{{ layer.short }}</a>
@@ -203,10 +223,29 @@
 {% endmacro %}
 
 {% block module_contents %}
+    {#- Documents: identifiers in <code> are linked to the API by linkify
+        (pdoc's filter also scans attribute values; see render_document()). -#}
+    {% for d in documents %}
+        <section class="doc" id="{{ d.id }}">
+            <div class="layerhead dochead">
+                <h2 id="{{ d.title_anchor }}">{{ d.title | safe }}</h2>
+                <p>Document &middot; names in code font link to the API reference</p>
+            </div>
+            <div class="docstring">{{ d.html | linkify | safe }}</div>
+        </section>
+    {% endfor %}
+    <div class="parthead" id="{{ api_anchor }}">
+        <h1>API reference</h1>
+        <p>Every class, function, method, field and constant, public and private,
+            grouped by driver layer.</p>
+    </div>
     {% for layer in layers %}
         <div class="layerhead" id="layer-{{ layer.number }}">
             <h2>{{ layer.title }}</h2>
             {% if layer.description %}<p>{{ layer.description }}</p>{% endif %}
+            {% if layer_chapters[layer.number] %}<p class="design-link">Design:
+                {% for anchor, label in layer_chapters[layer.number] %}<a href="#{{ anchor }}">{{ label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+            </p>{% endif %}
         </div>
         {% for section in layer.sections %}
             {% if section.title %}<h3 class="sectionhead">{{ section.title }}</h3>{% endif %}
@@ -267,6 +306,26 @@
         main .sectionhead { margin: 1.6rem 0 .4rem; font-style: italic; font-weight: 500; color: var(--muted); }
         main .member-group { margin: 1.2rem 0 .3rem 2rem; font-size: .75em; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
         body.hide-private .private { display: none !important; }
+        /* Documents */
+        nav.pdoc .nav-doc ul { padding-left: .5rem; }
+        nav.pdoc .nav-doc li a { font-size: .86em; }
+        nav.pdoc .nav-doc li.toc-3 a { padding-left: 1rem; font-size: .82em; }
+        nav.pdoc .nav-heading a { color: inherit; }
+        main .doc { margin-bottom: 2rem; }
+        main .dochead { border-left-color: var(--lock-other); }
+        main .dochead h2 code { font-size: .95em; }
+        main .doc h2 { margin-top: 2.2rem; padding-bottom: .2rem; border-bottom: 1px solid var(--accent2); }
+        main .doc h3 { margin-top: 1.6rem; }
+        main .doc table { border-collapse: collapse; margin: .6rem 0; font-size: .92em; }
+        main .doc th { background: #0066CC; color: #FFFFFF; text-align: left; }
+        main .doc th, main .doc td { border: 1px solid var(--accent2); padding: .25rem .5rem; vertical-align: top; }
+        main .doc tbody tr:nth-child(even) td { background: #F8F9FA; }
+        main .doc a.diagram { display: block; margin: .8rem 0; }
+        main .doc a.diagram img { max-width: 100%; height: auto; border: 1px solid var(--accent2); border-radius: 4px; background: #FFFFFF; }
+        main .parthead { margin: 3rem 0 1rem; padding: .8rem 1rem; background: var(--accent); border-left: 6px solid #0066CC; }
+        main .parthead h1 { margin: 0; }
+        main .parthead p { margin: .2rem 0 0; color: var(--muted); }
+        main .layerhead .design-link { font-size: .85em; }
     </style>
 {% endblock %}
 
