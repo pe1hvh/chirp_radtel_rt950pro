@@ -4,3 +4,5 @@ __pycache__/
 *.img
 *.dat
 rt950_dump_*.txt
+site/
+doclint.txt
