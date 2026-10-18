@@ -1,0 +1,55 @@
+# Build the API documentation of the driver (Google-style docstrings,
+# rendered with pdoc) and publish it on GitHub Pages.
+#
+# One-time setup: repository Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions". The page is then served at
+# https://<user>.github.io/<repo>/
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pdoc
+        run: pip install pdoc
+
+      # CHIRP is not needed: the driver has stand-ins for documentation builds.
+      - name: Build HTML with pdoc
+        run: |
+          PYTHONPATH=. pdoc --docformat google -o site radtel_rt950pro
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
