@@ -53,16 +53,23 @@ jobs:
 
       - name: Install tools
         # pdoc pinned to 16.x: the template in docs/templates extends its default.
-        run: pip install "pdoc>=16,<17" pydocstyle "pydoclint>=0.11,<0.12"
+        run: pip install "pdoc>=16,<17" pydocstyle "pydoclint>=0.11,<0.12" pylint
 
       # Every class, function, method, parameter and return value must be
-      # documented (public and private). pydoclint checks Args/Returns/Yields
-      # against the signatures; DOC106/107 (type hints) and DOC502/503
-      # (exceptions raised in called functions) are not checked.
+      # documented (public and private). pydocstyle only checks the names in
+      # __all__, so pylint's missing-docstring checks, with no exemption for
+      # names starting with "_", cover every other module-level class,
+      # function and method (nested functions are not checked by either).
+      # pydoclint checks Args/Returns/Yields against the signatures;
+      # DOC106/107 (type hints) and DOC502/503 (exceptions raised in called
+      # functions) are not checked.
       - name: Check docstrings (main)
         working-directory: main
         run: |
           pydocstyle --convention=google radtel_rt950pro.py
+          pylint --disable=all --no-docstring-rgx='^$' \
+            --enable=missing-module-docstring,missing-class-docstring,missing-function-docstring \
+            radtel_rt950pro.py
           pydoclint --style=google --skip-checking-short-docstrings=False \
             --arg-type-hints-in-docstring=False --check-return-types=False \
             --check-yield-types=False --check-class-attributes=False \
@@ -75,6 +82,9 @@ jobs:
         working-directory: develop
         run: |
           pydocstyle --convention=google radtel_rt950pro.py
+          pylint --disable=all --no-docstring-rgx='^$' \
+            --enable=missing-module-docstring,missing-class-docstring,missing-function-docstring \
+            radtel_rt950pro.py
           pydoclint --style=google --skip-checking-short-docstrings=False \
             --arg-type-hints-in-docstring=False --check-return-types=False \
             --check-yield-types=False --check-class-attributes=False \
