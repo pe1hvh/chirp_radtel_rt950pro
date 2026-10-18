@@ -18,7 +18,12 @@ settings, write plan) gives byte-identical results.
   the API documentation on GitHub Pages. A pdoc template override
   (`docs/templates/module.html.jinja2`) titles the pages "Radtel RT-950 Pro
   driver for CHIRP" and groups the side menu into collapsible sections
-  (Classes, Functions, Variables) with expandable classes.
+  (Classes, Functions, Variables) with expandable classes, "Expand all" /
+  "Collapse all" buttons, and a menu that opens at the current anchor.
+- README links to the published documentation:
+  <https://pe1hvh.github.io/chirp_radtel_rt950pro>.
+- `docs/status.md`: development status, sources, risks and known bugs
+  (English; replaces the Dutch `docs/rt950pro-chirp-geheugenkaart.md`).
 
 ### Changed
 - One `__all__` listing the complete public API. Previously six `__all__`
@@ -39,6 +44,9 @@ settings, write plan) gives byte-identical results.
 - Removed dead code: an unused `settings` stand-in with seven
   self-assignments and the never-read attribute `_channel_write_bytes`.
 - Outdated comments still referred to APRS write command `0x55`.
+- Side menu of the documentation did not collapse: the template in the
+  repository was the title-only version.
+- README named the vendor CPS `RT-950_CPS`; it is `RT-950PRO_CPS`.
 
 ### Known issues
 - Applying settings resets the VFO frequency band to 0: the band list
