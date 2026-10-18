@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1627" height="1051" viewBox="0 0 1627 1051" role="img" aria-label="6. Settings tab: get_settings / set_settings">
+<defs><marker id="solid" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker><marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#6B7280" stroke-width="1.4"/></marker></defs>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<g transform="translate(-0.0,0)">
+<text x="30.0" y="36.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#0066CC" text-anchor="start" font-weight="bold">6. Settings tab: get_settings / set_settings</text>
+<line x1="85.0" y1="94.0" x2="85.0" y2="1031.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="363.4" y1="94.0" x2="363.4" y2="1031.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="775.1" y1="94.0" x2="775.1" y2="1031.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1143.2" y1="94.0" x2="1143.2" y2="1031.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1506.6" y1="94.0" x2="1506.6" y2="1031.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<rect x="343.4" y="634.0" width="1245.2" height="238.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
+<path d="M343.4,634.0 h43.6 v12 l-8,8 h-35.6 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
+<text x="350.4" y="648.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">loop</text>
+<text x="395.0" y="648.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">every RadioSetting with an apply callback</text>
+<rect x="357.4" y="756.0" width="1217.2" height="102.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
+<path d="M357.4,756.0 h36.7 v12 l-8,8 h-28.7 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
+<text x="364.4" y="770.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">alt</text>
+<text x="402.1" y="770.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">SettingsError / KeyError / IndexError / ValueError</text>
+<text x="224.2" y="130.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">select the Settings tab (first time)</text>
+<line x1="85.0" y1="136.0" x2="363.4" y2="136.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="569.2" y="162.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">get_settings()</text>
+<line x1="363.4" y1="168.0" x2="775.1" y2="168.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M775.1,190.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="811.1" y="202.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_require_image()</text>
+<text x="959.2" y="237.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_build_vfo_group(image.vfo)</text>
+<line x1="775.1" y1="243.0" x2="1143.2" y2="243.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="959.2" y="270.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_build_modulation_group, _build_function_group,</text>
+<text x="959.2" y="285.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_build_aprs_group, _build_dtmf_group (if present)</text>
+<line x1="775.1" y1="291.0" x2="1143.2" y2="291.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="959.2" y="317.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_build_zone_group(image)</text>
+<line x1="775.1" y1="323.0" x2="1143.2" y2="323.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M1143.2,345.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1179.2" y="357.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">RadioSetting per field</text>
+<text x="1179.2" y="372.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">set_apply_callback(_apply_..., section object)</text>
+<text x="959.2" y="407.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">RadioSettingGroup objects</text>
+<line x1="1143.2" y1="413.0" x2="775.1" y2="413.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="569.2" y="439.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">RadioSettings(*groups)</text>
+<line x1="775.1" y1="445.0" x2="363.4" y2="445.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="224.2" y="471.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">change a value</text>
+<line x1="85.0" y1="477.0" x2="363.4" y2="477.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M363.4,499.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="399.4" y="511.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_apply_settings(): new value into the setting</text>
+<text x="399.4" y="526.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">copy.deepcopy(settings); drop immutable/uninitialised</text>
+<text x="569.2" y="561.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">set_settings(copy)</text>
+<line x1="363.4" y1="567.0" x2="775.1" y2="567.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M775.1,589.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="811.1" y="601.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">isinstance(settings, RadioSettings); walk()</text>
+<text x="959.2" y="678.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">run_apply_callback()</text>
+<line x1="775.1" y1="684.0" x2="1143.2" y2="684.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1324.9" y="711.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">e.g. set_function_value(), vfo.freq_band = ...,</text>
+<text x="1324.9" y="726.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">image.zone_names[i] = name[:10]</text>
+<line x1="1143.2" y1="732.0" x2="1506.6" y2="732.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="959.2" y="800.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">errors.RadioError(message)</text>
+<line x1="1143.2" y1="806.0" x2="775.1" y2="806.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="569.2" y="832.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">exception -&gt; error dialog</text>
+<line x1="775.1" y1="838.0" x2="363.4" y2="838.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<path d="M775.1,888.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="811.1" y="900.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_memory_cache.clear()</text>
+<text x="569.2" y="935.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">return</text>
+<line x1="775.1" y1="941.0" x2="363.4" y2="941.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<rect x="755.1" y="963.0" width="771.5" height="42.0" fill="#FFF8DC" stroke="#D4B106" stroke-width="1" rx="3"/>
+<text x="765.1" y="980.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">The callback is a closure over the original setting and section</text>
+<text x="765.1" y="996.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">objects, so the deep copy still updates the driver&#x27;s RadioImage.</text>
+<rect x="30.0" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="85.0" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">User</text>
+<rect x="290.8" y="54.0" width="145.3" height="40" rx="4" fill="#0066CC"/>
+<text x="363.4" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">ChirpSettingsEdit</text>
+<rect x="712.8" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="775.1" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RT950ProDriver</text>
+<rect x="1067.1" y="54.0" width="152.2" height="40" rx="4" fill="#0066CC"/>
+<text x="1143.2" y="71.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">_build_*_group /</text>
+<text x="1143.2" y="85.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">_apply_* callbacks</text>
+<rect x="1427.1" y="54.0" width="159.1" height="40" rx="4" fill="#0066CC"/>
+<text x="1506.6" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RadioImage sections</text>
+</g></svg>

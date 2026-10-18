@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="880" viewBox="0 0 1180 880" role="img" aria-label="Driver layers of radtel_rt950pro.py">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker><marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="13" markerHeight="13" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#FFFFFF" stroke="#1F2937" stroke-width="1.2"/></marker><marker id="dia" viewBox="0 0 14 10" refX="1" refY="5" markerWidth="15" markerHeight="11" orient="auto-start-reverse"><path d="M1,5 L7,1 L13,5 L7,9 z" fill="#1F2937"/></marker></defs>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="24" y="32" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#0066CC" text-anchor="start" font-weight="bold">Driver layers of radtel_rt950pro.py</text>
+<rect x="210" y="54" width="720" height="56" rx="6" fill="#E8EEF7" stroke="#9CA3AF"/>
+<text x="570.0" y="77" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1F2937" text-anchor="middle" font-weight="bold">CHIRP (wxui editors, clone dialogs, chirp_common, settings, directory)</text>
+<text x="570.0" y="97" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11" fill="#6B7280" text-anchor="middle" font-weight="normal">calls: sync_in, sync_out, get/set_memory, get/set_settings, get_sub_devices, process_mmap, save_mmap</text>
+<rect x="210" y="128" width="720" height="94" rx="6" fill="#F8F9FA" stroke="#9CA3AF"/>
+<rect x="210" y="128" width="46" height="94" rx="6" fill="#0066CC"/>
+<rect x="240" y="128" width="16" height="94" fill="#0066CC"/>
+<text x="233" y="182.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">6</text>
+<text x="272" y="152" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0066CC" text-anchor="start" font-weight="bold">CHIRP integration</text>
+<text x="272" y="173" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">RT950ProDriver (registered), RT950ProRadio, RT950ProZoneRadio x 10</text>
+<text x="272" y="194" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">Memory &lt;-&gt; ChannelRecord, RadioSettings tree + apply callbacks,</text>
+<text x="272" y="209" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">write options and _WRITE_PLAN, legacy-image upgrade, CHIRP stand-ins</text>
+<rect x="210" y="236" width="720" height="94" rx="6" fill="#F8F9FA" stroke="#9CA3AF"/>
+<rect x="210" y="236" width="46" height="94" rx="6" fill="#0066CC"/>
+<rect x="240" y="236" width="16" height="94" fill="#0066CC"/>
+<text x="233" y="290.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">5</text>
+<text x="272" y="260" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0066CC" text-anchor="start" font-weight="bold">Transport</text>
+<text x="272" y="281" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">CloneSerialTransport, CloneSegment, DEFAULT_SEGMENTS</text>
+<text x="272" y="302" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">PROGRAMBT9000U handshake, XOR key, 0x80-byte blocks,</text>
+<text x="272" y="317" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">ACK time-outs 8 / 10 / 30 s, progress callback</text>
+<rect x="210" y="344" width="720" height="94" rx="6" fill="#F8F9FA" stroke="#9CA3AF"/>
+<rect x="210" y="344" width="46" height="94" rx="6" fill="#0066CC"/>
+<rect x="240" y="344" width="16" height="94" fill="#0066CC"/>
+<text x="233" y="398.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">4</text>
+<text x="272" y="368" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0066CC" text-anchor="start" font-weight="bold">Image</text>
+<text x="272" y="389" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">RadioImage, parse_zone_names, encode_zone_names</text>
+<text x="272" y="410" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">35,456-byte image &lt;-&gt; parsed sections; keeps remainder and</text>
+<text x="272" y="425" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">0x7BC0-0x7FFF verbatim</text>
+<rect x="210" y="452" width="720" height="94" rx="6" fill="#F8F9FA" stroke="#9CA3AF"/>
+<rect x="210" y="452" width="46" height="94" rx="6" fill="#0066CC"/>
+<rect x="240" y="452" width="16" height="94" fill="#0066CC"/>
+<text x="233" y="506.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">3</text>
+<text x="272" y="476" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0066CC" text-anchor="start" font-weight="bold">Settings API</text>
+<text x="272" y="497" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">SettingSpec, SettingsError, get_/set_*_value, DTMF accessors</text>
+<text x="272" y="518" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">validated access by key (_FUNCTION_SPECS, _APRS_SPECS)</text>
+<rect x="210" y="560" width="720" height="94" rx="6" fill="#F8F9FA" stroke="#9CA3AF"/>
+<rect x="210" y="560" width="46" height="94" rx="6" fill="#0066CC"/>
+<rect x="240" y="560" width="16" height="94" fill="#0066CC"/>
+<text x="233" y="614.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">2</text>
+<text x="272" y="584" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0066CC" text-anchor="start" font-weight="bold">Settings sections</text>
+<text x="272" y="605" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">VFOSettings, FunctionSettings, DTMFSettings, Modulation*, APRSSettings</text>
+<text x="272" y="626" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">parse_* / encode_* per block; read-modify-write on stored bytes</text>
+<rect x="210" y="668" width="720" height="94" rx="6" fill="#F8F9FA" stroke="#9CA3AF"/>
+<rect x="210" y="668" width="46" height="94" rx="6" fill="#0066CC"/>
+<rect x="240" y="668" width="16" height="94" fill="#0066CC"/>
+<text x="233" y="722.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="20" fill="#FFFFFF" text-anchor="middle" font-weight="bold">1</text>
+<text x="272" y="692" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0066CC" text-anchor="start" font-weight="bold">Channel records</text>
+<text x="272" y="713" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">ChannelRecord, ToneSetting, enums, BCD / GB2312 codecs</text>
+<text x="272" y="734" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">32-byte channel record; unchanged record = original bytes</text>
+<rect x="210" y="776" width="720" height="50" rx="6" fill="#E8EEF7" stroke="#9CA3AF"/>
+<text x="570.0" y="806" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1F2937" text-anchor="middle" font-weight="bold">RT-950 Pro over the USB programming cable (115200 baud, 8N1)</text>
+<text x="192" y="169" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">Memory,</text>
+<text x="192" y="184" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">RadioSettings</text>
+<text x="192" y="277" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">bytes on</text>
+<text x="192" y="292" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">the wire</text>
+<text x="192" y="385" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">image bytes</text>
+<text x="192" y="400" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">&lt;-&gt; RadioImage</text>
+<text x="192" y="493" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">key / value</text>
+<text x="192" y="601" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">block bytes</text>
+<text x="192" y="616" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">&lt;-&gt; dataclass</text>
+<text x="192" y="709" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">32 bytes</text>
+<text x="192" y="724" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="end" font-weight="normal">&lt;-&gt; record</text>
+<line x1="970" y1="746" x2="970" y2="140" stroke="#1F2937" stroke-width="1.4" marker-end="url(#arr)"/>
+<text x="984" y="330" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">each layer uses only</text>
+<text x="984" y="346" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">the layers below it</text>
+<text x="984" y="372" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">(layer 6 also feeds</text>
+<text x="984" y="388" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">layer 5 with the</text>
+<text x="984" y="404" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">write plan)</text>
+</svg>

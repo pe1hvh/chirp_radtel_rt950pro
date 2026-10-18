@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+Documentation only. The driver's code is unchanged.
+
+### Added
+- `docs/chirp-interface.md`: how CHIRP and the driver interact — entry
+  points, declared features, download, wire protocol, opening images,
+  zones as sub-devices, memory and tone mapping, settings, saving and
+  upload — with nine sequence diagrams (`docs/diagrams/seq-*.svg`).
+  Verified against the CHIRP source (kk7ds/chirp `0a9be8e`).
+- `docs/fto.md`: functional and technical design — functions, safety
+  rules, layers, data model, per-layer design, write plan, error mapping,
+  logging, tests — with layer, class and write-plan diagrams
+  (`docs/diagrams/fto-*.svg`).
+- Five observations from the interface analysis, documented in
+  `docs/chirp-interface.md` §15 (not fixed): APRS/channel 961-990
+  snapshots are not refreshed after an upload; memory comments are not
+  found after a zone rename; read progress text past channel 990; repeated
+  payload builds in `sync_out()`; the developer Browser tab shows stale
+  bytes after an edit and its own edits are lost.
+
+- The documentation page (`radtel_rt950pro.html`) now shows both documents
+  above the API reference, with a *Documents* group in the side menu.
+  `docs/build.py` converts the Markdown with pdoc's markdown2 settings, gives
+  headings GitHub-style anchors per document (`design-…`, `interface-…`),
+  links names in code font to the API, sends links to other Markdown files to
+  GitHub for the built branch (`--branch`, default the current git branch),
+  copies `docs/diagrams` next to the page (click opens full size), stops on
+  a broken link between documents, and links each API layer heading to its
+  design chapter.
+
+### Changed
+- README: repository layout lists the new documents; the documentation
+  section describes the combined page and the `develop` build.
+- Template `docs/templates/module.html.jinja2`: *Documents* menu group,
+  document sections, *API reference* heading, table and diagram styling.
+- Workflow `.github/workflows/docs.yml`: sets `DOCS_BRANCH` (main /
+  develop) per build, so links from the documents to GitHub point to the
+  branch that was built. An environment variable instead of `--branch`, so
+  the older `build.py` on main ignores it until develop is merged.
+
+### Known issues (found while checking the page, not fixed)
+- Already in 0.1.2: pdoc gives docstring section headings the same `id` on
+  every object (`returns`, `arguments`, `raises`, `warning`, `yields`,
+  `byte-layout`), and one link points to `#_CloneModeRadio` (a CHIRP
+  stand-in that is not documented).
+
 ## 0.1.2 — 2026-10-18
 
 Documentation only. The driver's code is unchanged: an AST comparison with

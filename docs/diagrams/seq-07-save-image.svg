@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1443" height="744" viewBox="0 0 1443 744" role="img" aria-label="7. Saving a .img file">
+<defs><marker id="solid" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker><marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#6B7280" stroke-width="1.4"/></marker></defs>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<g transform="translate(-0.0,0)">
+<text x="30.0" y="36.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#0066CC" text-anchor="start" font-weight="bold">7. Saving a .img file</text>
+<line x1="85.0" y1="94.0" x2="85.0" y2="724.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="232.3" y1="94.0" x2="232.3" y2="724.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="386.9" y1="94.0" x2="386.9" y2="724.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="741.2" y1="94.0" x2="741.2" y2="724.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1090.8" y1="94.0" x2="1090.8" y2="724.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="158.7" y="130.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">File &gt; Save</text>
+<line x1="85.0" y1="136.0" x2="232.3" y2="136.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="309.6" y="162.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">save(filename)</text>
+<line x1="232.3" y1="168.0" x2="386.9" y2="168.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M386.9,190.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="422.9" y="202.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">save() -&gt; save_mmap(filename)</text>
+<path d="M386.9,233.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="422.9" y="245.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_refresh_mmap()</text>
+<text x="564.1" y="280.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_build_clone_payload(image) -&gt; image.to_bytes()</text>
+<line x1="386.9" y1="286.0" x2="741.2" y2="286.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M741.2,308.0 h28 v64.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="777.2" y="320.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">channels: to_bytes() (unchanged = raw bytes)</text>
+<text x="777.2" y="335.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">keep 0x7BC0-0x7FFF (channel_extra)</text>
+<text x="777.2" y="350.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">encode VFO, function, DTMF, modulation,</text>
+<text x="777.2" y="365.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">APRS, zone names on top of remainder</text>
+<text x="564.1" y="400.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">payload, 35,456 bytes</text>
+<line x1="741.2" y1="406.0" x2="386.9" y2="406.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<path d="M386.9,428.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="422.9" y="440.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_mmap = MemoryMapBytes(payload)</text>
+<text x="422.9" y="455.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_parse_memobj()  (Browser view)</text>
+<text x="738.9" y="490.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">super().save_mmap(filename)</text>
+<line x1="386.9" y1="496.0" x2="1090.8" y2="496.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M1090.8,518.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1126.8" y="530.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">write mmap bytes</text>
+<text x="1126.8" y="545.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">+ MAGIC + base64(JSON metadata)</text>
+<rect x="951.2" y="576.0" width="279.3" height="58.0" fill="#FFF8DC" stroke="#D4B106" stroke-width="1" rx="3"/>
+<text x="961.2" y="593.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">metadata: rclass, vendor, model,</text>
+<text x="961.2" y="609.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">variant, chirp_version, rt950_layout,</text>
+<text x="961.2" y="625.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">one entry per zone VARIANT</text>
+<line x1="1090.8" y1="662.0" x2="386.9" y2="662.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<line x1="386.9" y1="694.0" x2="232.3" y2="694.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<rect x="30.0" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="85.0" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">User</text>
+<rect x="170.0" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="232.3" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">ChirpEditorSet</text>
+<rect x="324.6" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="386.9" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RT950ProDriver</text>
+<rect x="686.2" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="741.2" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RadioImage</text>
+<rect x="1028.5" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="1090.8" y="71.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">CloneModeRadio</text>
+<text x="1090.8" y="85.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">(CHIRP base)</text>
+</g></svg>

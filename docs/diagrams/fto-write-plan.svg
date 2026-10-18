@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="490" viewBox="0 0 1160 490" role="img" aria-label="Clone image layout (read order) and write plan">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker><marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="13" markerHeight="13" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#FFFFFF" stroke="#1F2937" stroke-width="1.2"/></marker><marker id="dia" viewBox="0 0 14 10" refX="1" refY="5" markerWidth="15" markerHeight="11" orient="auto-start-reverse"><path d="M1,5 L7,1 L13,5 L7,9 z" fill="#1F2937"/></marker></defs>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="24" y="32" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#0066CC" text-anchor="start" font-weight="bold">Clone image layout (read order) and write plan</text>
+<text x="30" y="70" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#6B7280" text-anchor="start" font-weight="normal">Image (.img) = DEFAULT_SEGMENTS in read order, 35,456 bytes (channel area not to scale)</text>
+<rect x="30.0" y="90" width="200.0" height="54" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="130.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">channels 1-960</text>
+<text x="130.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x7800 B</text>
+<text x="33" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0x0000</text>
+<text x="130.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">always</text>
+<rect x="230.0" y="90" width="117.5" height="54" fill="#FDE2B8" stroke="#1F2937" stroke-width="0.9"/>
+<text x="288.75" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">ch. 961-990</text>
+<text x="288.75" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x3c0 B</text>
+<text x="233" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0x7800</text>
+<text x="288.75" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">only if changed</text>
+<rect x="347.5" y="90" width="122.5" height="54" fill="#E5E7EB" stroke="#1F2937" stroke-width="0.9"/>
+<text x="408.75" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">unused</text>
+<text x="408.75" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x440 B</text>
+<text x="350.5" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0x7BC0</text>
+<text x="408.75" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">0x7BC0-0x7BFF only</text>
+<text x="408.75" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">with 961-990; rest never</text>
+<rect x="470.0" y="90" width="90.0" height="54" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="515.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">VFO</text>
+<text x="515.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x100 B</text>
+<text x="473.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0x8000</text>
+<text x="515.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">always</text>
+<rect x="560.0" y="90" width="90.0" height="54" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="605.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">function</text>
+<text x="605.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x100 B</text>
+<text x="563.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0x9000</text>
+<text x="605.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">always</text>
+<rect x="650.0" y="90" width="100.0" height="54" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="700.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">DTMF</text>
+<text x="700.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x200 B</text>
+<text x="653.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0xA000</text>
+<text x="700.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">always</text>
+<rect x="750.0" y="90" width="100.0" height="54" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="800.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">mod. params</text>
+<text x="800.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x200 B</text>
+<text x="753.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0xB000</text>
+<text x="800.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">always</text>
+<rect x="850.0" y="90" width="110.0" height="54" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="905.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">mod. names</text>
+<text x="905.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x300 B</text>
+<text x="853.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0xD000</text>
+<text x="905.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">always</text>
+<rect x="960.0" y="90" width="88.0" height="54" fill="#FDE2B8" stroke="#1F2937" stroke-width="0.9"/>
+<text x="1004.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">APRS</text>
+<text x="1004.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x80 B</text>
+<text x="963.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">APRS 0x0000</text>
+<text x="1004.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">only if changed,</text>
+<text x="1004.0" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">last</text>
+<rect x="1048.0" y="90" width="90.0" height="54" fill="#D7F0DD" stroke="#1F2937" stroke-width="0.9"/>
+<text x="1093.0" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="bold">zone names</text>
+<text x="1093.0" y="130" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x100 B</text>
+<text x="1051.0" y="160" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="10" fill="#6B7280" text-anchor="start" font-weight="normal">0xC000</text>
+<text x="1093.0" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">if read from</text>
+<text x="1093.0" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1F2937" text-anchor="middle" font-weight="normal">0xC000</text>
+<text x="30" y="282" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#6B7280" text-anchor="start" font-weight="normal">Upload order (_WRITE_PLAN), as filtered by _write_options():</text>
+<rect x="30.0" y="300" width="301.4" height="44" rx="4" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="40.0" y="319" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">1  channels 0x0000-0x77FF (240 blocks)</text>
+<text x="40.0" y="333" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">    or 0x0000-0x7BFF (248 blocks)</text>
+<line x1="335.4" y1="315" x2="357.4" y2="315" stroke="#1F2937" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="363.4" y="300" width="148.1" height="30" rx="4" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="373.4" y="319" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">2  VFO 0x8000 (2)</text>
+<line x1="515.5" y1="315" x2="537.5" y2="315" stroke="#1F2937" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="543.5" y="300" width="184.6" height="30" rx="4" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="553.5" y="319" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">3  function 0x9000 (2)</text>
+<line x1="732.1" y1="315" x2="754.1" y2="315" stroke="#1F2937" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="760.1" y="300" width="155.4" height="30" rx="4" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="770.1" y="319" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">4  DTMF 0xA000 (4)</text>
+<rect x="30.0" y="370" width="206.5" height="30" rx="4" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="40.0" y="389" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">5  mod. params 0xB000 (4)</text>
+<line x1="240.5" y1="385" x2="262.5" y2="385" stroke="#1F2937" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="268.5" y="370" width="199.2" height="30" rx="4" fill="#CFE2F7" stroke="#1F2937" stroke-width="0.9"/>
+<text x="278.5" y="389" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">6  mod. names 0xD000 (6)</text>
+<line x1="471.7" y1="385" x2="493.7" y2="385" stroke="#1F2937" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="499.7" y="370" width="272.2" height="30" rx="4" fill="#D7F0DD" stroke="#1F2937" stroke-width="0.9"/>
+<text x="509.7" y="389" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">7  zone names 0xC000 (2), if valid</text>
+<line x1="775.9" y1="385" x2="797.9" y2="385" stroke="#1F2937" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="803.9" y="370" width="264.9" height="30" rx="4" fill="#FDE2B8" stroke="#1F2937" stroke-width="0.9"/>
+<text x="813.9" y="389" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">8  APRS, cmd 0x58 (1), if changed</text>
+<text x="30" y="450" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">Total: 258 blocks minimum (no zone names, no APRS) to 269 maximum. Every block: header 0x57/0x58, addr_hi, addr_lo, 0x80 + 128 XOR-ed bytes; radio answers 0x06.</text>
+<text x="30" y="470" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B7280" text-anchor="start" font-weight="normal">Never written: 0x7C00-0x7FFF, anything from 0xE000. Legacy 960-slot images never write 0x7800-0x7BFF.</text>
+</svg>
