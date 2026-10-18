@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1841" height="1180" viewBox="0 0 1841 1180" role="img" aria-label="9. Upload to radio (sync_out)">
+<defs><marker id="solid" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F2937"/></marker><marker id="open" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10" fill="none" stroke="#6B7280" stroke-width="1.4"/></marker></defs>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<g transform="translate(-0.0,0)">
+<text x="30.0" y="36.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#0066CC" text-anchor="start" font-weight="bold">9. Upload to radio (sync_out)</text>
+<line x1="85.0" y1="94.0" x2="85.0" y2="1160.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="253.0" y1="94.0" x2="253.0" y2="1160.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="690.1" y1="94.0" x2="690.1" y2="1160.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1067.3" y1="94.0" x2="1067.3" y2="1160.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1437.6" y1="94.0" x2="1437.6" y2="1160.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<line x1="1722.9" y1="94.0" x2="1722.9" y2="1160.0" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 4"/>
+<rect x="173.0" y="847.0" width="1629.9" height="289.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
+<path d="M173.0,847.0 h36.7 v12 l-8,8 h-28.7 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
+<text x="180.0" y="861.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">alt</text>
+<text x="217.7" y="861.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">all blocks acknowledged</text>
+<line x1="173.0" y1="990.0" x2="1802.9" y2="990.0" stroke="#7A8CA5" stroke-dasharray="6 4" stroke-width="1"/>
+<text x="181.0" y="1006.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">CloneTransportError mentioning &#x27;cmd 0x58&#x27; (no &#x27;E&#x27; sent)</text>
+<line x1="173.0" y1="1070.0" x2="1802.9" y2="1070.0" stroke="#7A8CA5" stroke-dasharray="6 4" stroke-width="1"/>
+<text x="181.0" y="1086.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">any other exception (no &#x27;E&#x27; sent)</text>
+<rect x="247.0" y="663.0" width="1555.9" height="166.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
+<path d="M247.0,663.0 h43.6 v12 l-8,8 h-35.6 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
+<text x="254.0" y="677.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">loop</text>
+<text x="298.6" y="677.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">each 0x80-byte block in plan order</text>
+<text x="169.0" y="130.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">Radio &gt; Upload, port</text>
+<line x1="85.0" y1="136.0" x2="253.0" y2="136.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="471.6" y="162.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">set_pipe(serial); status_fn; thread: sync_out()</text>
+<line x1="253.0" y1="168.0" x2="690.1" y2="168.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M690.1,190.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="726.1" y="202.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">check pipe and _image</text>
+<path d="M690.1,233.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="726.1" y="245.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">payload = _build_clone_payload(image)</text>
+<text x="726.1" y="260.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">(ValueError here: nothing sent yet)</text>
+<text x="1063.9" y="295.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">CloneSerialTransport(pipe, logger=LOG)</text>
+<line x1="690.1" y1="301.0" x2="1437.6" y2="301.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="878.7" y="327.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_write_options()</text>
+<line x1="690.1" y1="333.0" x2="1067.3" y2="333.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M1067.3,355.0 h28 v64.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1103.3" y="367.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">write_aprs = APRS bytes != _aprs_original</text>
+<text x="1103.3" y="382.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">channel_bytes = 0x7C00 if 0x7800-0x7BFF changed</text>
+<text x="1103.3" y="397.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">  and not _legacy_960, else 0x7800</text>
+<text x="1103.3" y="412.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">write_zone_names = _zone_names_valid</text>
+<text x="878.7" y="447.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">options</text>
+<line x1="1067.3" y1="453.0" x2="690.1" y2="453.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="878.7" y="479.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">_build_write_plan(payload, **options)</text>
+<line x1="690.1" y1="485.0" x2="1067.3" y2="485.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M1067.3,507.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1103.3" y="519.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_WRITE_PLAN order: channels, VFO, function,</text>
+<text x="1103.3" y="534.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">DTMF, mod. params, mod. names, zone names, APRS</text>
+<text x="878.7" y="569.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">segments, data (258-269 blocks)</text>
+<line x1="1067.3" y1="575.0" x2="690.1" y2="575.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="1063.9" y="601.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">write_clone(data, segments=...)</text>
+<line x1="690.1" y1="607.0" x2="1437.6" y2="607.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1580.2" y="633.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">handshake()  (diagram 3)</text>
+<line x1="1437.6" y1="639.0" x2="1722.9" y2="639.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1580.2" y="707.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">0x57 (or 0x58 for APRS) + XOR payload</text>
+<line x1="1437.6" y1="713.0" x2="1722.9" y2="713.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1580.2" y="739.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">0x06 within 8 / 10 / 30 s</text>
+<line x1="1722.9" y1="745.0" x2="1437.6" y2="745.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="1063.9" y="771.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">progress_cb(done, total, &#x27;write&#x27;)</text>
+<line x1="1437.6" y1="777.0" x2="690.1" y2="777.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="471.6" y="803.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">status_fn(&#x27;Writing channels ...&#x27; / &#x27;Writing Zone names...&#x27;)</text>
+<line x1="690.1" y1="809.0" x2="253.0" y2="809.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="1580.2" y="891.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">&#x27;E&#x27;</text>
+<line x1="1437.6" y1="897.0" x2="1722.9" y2="897.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<path d="M690.1,919.0 h28 v19.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
+<text x="726.1" y="931.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_mmap = MemoryMapBytes(payload); _parse_memobj()</text>
+<text x="471.6" y="966.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">return -&gt; dialog.complete()</text>
+<line x1="690.1" y1="972.0" x2="253.0" y2="972.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="471.6" y="1031.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">RadioError(&#x27;All channels, settings and zone names</text>
+<text x="471.6" y="1046.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">were written, but ... APRS block (cmd 0x58) ...&#x27;)</text>
+<line x1="690.1" y1="1052.0" x2="253.0" y2="1052.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<text x="471.6" y="1110.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">RadioError(&#x27;Clone write failed: ...&#x27;)</text>
+<line x1="690.1" y1="1116.0" x2="253.0" y2="1116.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
+<rect x="30.0" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="85.0" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">User</text>
+<rect x="180.3" y="54.0" width="145.3" height="40" rx="4" fill="#0066CC"/>
+<text x="253.0" y="71.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">ChirpUploadDialog</text>
+<text x="253.0" y="85.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">+ CloneThread</text>
+<rect x="627.8" y="54.0" width="124.6" height="40" rx="4" fill="#0066CC"/>
+<text x="690.1" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RT950ProDriver</text>
+<rect x="994.7" y="54.0" width="145.3" height="40" rx="4" fill="#0066CC"/>
+<text x="1067.3" y="71.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">_write_options /</text>
+<text x="1067.3" y="85.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">_build_write_plan</text>
+<rect x="1354.6" y="54.0" width="166.0" height="40" rx="4" fill="#0066CC"/>
+<text x="1437.6" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">CloneSerialTransport</text>
+<rect x="1667.9" y="54.0" width="110.0" height="40" rx="4" fill="#0066CC"/>
+<text x="1722.9" y="78.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#FFFFFF" text-anchor="middle" font-weight="bold">RT-950 Pro</text>
+</g></svg>

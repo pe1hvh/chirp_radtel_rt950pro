@@ -84,12 +84,19 @@ jobs:
           fi
 
       # CHIRP is not needed: the driver has stand-ins for documentation builds.
+      # DOCS_BRANCH sets the branch for links from the documents to GitHub
+      # (one run builds both branches). An environment variable, not an
+      # option, so an older build.py on the other branch simply ignores it.
       - name: Build main (site root)
         working-directory: main
+        env:
+          DOCS_BRANCH: main
         run: python docs/build.py -o "$GITHUB_WORKSPACE/site"
 
       - name: Build develop (site/develop)
         working-directory: develop
+        env:
+          DOCS_BRANCH: develop
         run: python docs/build.py -o "$GITHUB_WORKSPACE/site/develop"
 
       - uses: actions/configure-pages@v5
