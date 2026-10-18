@@ -36,7 +36,7 @@ jobs:
       # CHIRP is not needed: the driver has stand-ins for documentation builds.
       - name: Build HTML with pdoc
         run: |
-          PYTHONPATH=. pdoc --docformat google -o site radtel_rt950pro
+          PYTHONPATH=. pdoc --docformat google -t docs/templates -o site radtel_rt950pro
 
       - uses: actions/configure-pages@v5
 

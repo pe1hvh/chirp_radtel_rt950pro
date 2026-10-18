@@ -15,7 +15,10 @@ settings, write plan) gives byte-identical results.
   driver.
 - GitHub Actions workflow `.github/workflows/docs.yml`: renders the
   Google-style docstrings with pdoc on every push to `main` and publishes
-  the API documentation on GitHub Pages.
+  the API documentation on GitHub Pages. A pdoc template override
+  (`docs/templates/module.html.jinja2`) titles the pages "Radtel RT-950 Pro
+  driver for CHIRP" and groups the side menu into collapsible sections
+  (Classes, Functions, Variables) with expandable classes.
 
 ### Changed
 - One `__all__` listing the complete public API. Previously six `__all__`
