@@ -1,9 +1,14 @@
-# Enforce the release flow: main only accepts pull requests from develop
-# in this repository (not from a feature branch, not from a fork).
+# Enforce the release flow for main.
 #
-# The job name "source-branch" must be added as a REQUIRED status check
-# in the ruleset for main (Settings -> Rules -> Rulesets). A pull request
-# from any other branch then fails this check and cannot be merged.
+# A pull request into main is only accepted when it comes from this
+# repository (not from a fork) and from:
+#   - develop      the normal release, after develop was tested live;
+#   - hotfix/...   an urgent fix branched from main. After the merge the
+#                  same hotfix branch must be merged into develop as well.
+#
+# The job name "source-branch" must be a REQUIRED status check in the
+# ruleset for main (Settings -> Rules -> Rulesets). A pull request from any
+# other branch then fails this check and cannot be merged.
 name: main-only-from-develop
 
 on:
@@ -17,15 +22,26 @@ jobs:
   source-branch:
     runs-on: ubuntu-latest
     steps:
-      - name: Check that the pull request comes from develop
+      - name: Check that the pull request comes from develop or hotfix/...
         env:
           HEAD_REF: ${{ github.head_ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           THIS_REPO: ${{ github.repository }}
         run: |
-          if [ "$HEAD_REF" = "develop" ] && [ "$HEAD_REPO" = "$THIS_REPO" ]; then
-            echo "OK: pull request from $HEAD_REPO:develop"
-          else
-            echo "::error::Only develop may be merged into main (this pull request comes from $HEAD_REPO:$HEAD_REF)."
+          if [ "$HEAD_REPO" != "$THIS_REPO" ]; then
+            echo "::error::Pull requests from forks cannot be merged into main ($HEAD_REPO:$HEAD_REF)."
             exit 1
           fi
+          case "$HEAD_REF" in
+            develop)
+              echo "OK: release from develop"
+              ;;
+            hotfix/?*)
+              echo "OK: hotfix $HEAD_REF"
+              echo "::warning::After merging, merge $HEAD_REF into develop as well."
+              ;;
+            *)
+              echo "::error::Only develop or a hotfix/... branch may be merged into main (this pull request comes from $HEAD_REF)."
+              exit 1
+              ;;
+          esac
