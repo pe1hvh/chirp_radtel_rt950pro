@@ -1,0 +1,31 @@
+# Enforce the release flow: main only accepts pull requests from develop
+# in this repository (not from a feature branch, not from a fork).
+#
+# The job name "source-branch" must be added as a REQUIRED status check
+# in the ruleset for main (Settings -> Rules -> Rulesets). A pull request
+# from any other branch then fails this check and cannot be merged.
+name: main-only-from-develop
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that the pull request comes from develop
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" = "develop" ] && [ "$HEAD_REPO" = "$THIS_REPO" ]; then
+            echo "OK: pull request from $HEAD_REPO:develop"
+          else
+            echo "::error::Only develop may be merged into main (this pull request comes from $HEAD_REPO:$HEAD_REF)."
+            exit 1
+          fi
