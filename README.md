@@ -3,6 +3,8 @@
 A [CHIRP](https://chirpmyradio.com) driver for the Radtel RT-950 Pro with full
 support for the radio's **10 zones × 99 channels**, including zone names.
 
+**Documentation:** <https://pe1hvh.github.io/chirp_radtel_rt950pro>
+
 > **Experimental.** A driver bug can mis-program your radio. Always keep a
 > backup (CPS `.dat` and a CHIRP `.img`) before writing to the radio.
 
@@ -16,7 +18,7 @@ support for the radio's **10 zones × 99 channels**, including zone names.
 | APRS settings | ✅ | ✅ |
 
 Tested on hardware: Radtel RT-950 Pro, firmware **0.29** (10 × 99 zones),
-cross-checked against the vendor CPS **RT-950_CPS v1.3.3**.
+cross-checked against the vendor CPS **RT-950PRO_CPS v1.3.3**.
 Zones were introduced in firmware 0.24; older 960-channel firmware is not
 supported for writing channels 961–990.
 
@@ -95,6 +97,22 @@ scan the driver directory; use option 1 there.
 - A failed write names the command and address, e.g.
   `No ACK for write cmd 0x57 address 0xC000`.
 
+## Documentation
+
+The API documentation of the driver is published at
+**<https://pe1hvh.github.io/chirp_radtel_rt950pro>**. It covers every class,
+function and constant, including the byte layouts of the channel record, VFO
+entry, modulation block and clone protocol.
+
+It is generated from the Google-style docstrings in `radtel_rt950pro.py` with
+[pdoc](https://pdoc.dev) and rebuilt by GitHub Actions
+(`.github/workflows/docs.yml`) on every push to `main`. To build it locally:
+
+```
+pip install pdoc
+PYTHONPATH=. pdoc --docformat google -t docs/templates radtel_rt950pro
+```
+
 ## Repository layout
 
 | Path | Content |
@@ -102,6 +120,9 @@ scan the driver directory; use option 1 there.
 | `radtel_rt950pro.py` | the driver (single file, as CHIRP expects) |
 | `docs/memory-map.md` | confirmed memory map |
 | `docs/protocol.md` | clone protocol and timing |
+| `docs/status.md` | development status, sources, risks and known bugs |
+| `docs/templates/` | pdoc template for the API documentation |
+| `.github/workflows/docs.yml` | builds and publishes the API documentation |
 | `tools/find_zone_names.py` | read-only scan of the radio for known text |
 | `tools/make_sample_image.py` | sample `.img` with two invented zones |
 | `tools/chirp_list_left.py` | optional CHIRP patch: zone list on the left |

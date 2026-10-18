@@ -1,9 +1,134 @@
-{#- pdoc template override: project title instead of "API Documentation". -#}
+{#- pdoc template override for the Radtel RT-950 Pro driver documentation.
+
+    - Project title instead of "API Documentation".
+    - Left menu grouped into collapsible sections (Classes, Functions,
+      Variables); each class can be expanded to show its members.
+-#}
 {% extends "default/module.html.jinja2" %}
+
 {% block title %}Radtel RT-950 Pro driver for CHIRP{% endblock %}
+
+{% macro nav_class_members(members) %}
+    <ul class="memberlist">
+        {% for m in members if is_public(m) | trim %}
+            <li>
+                {% if m.kind == "class" %}
+                    {{ nav_class(m) }}
+                {% elif m.name == "__init__" %}
+                    <a class="function" href="#{{ m.qualname }}">{{ m.qualname.split(".")[-2] }}</a>
+                {% else %}
+                    <a class="{{ m.kind }}" href="#{{ m.qualname }}">{{ m.name }}</a>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% endmacro %}
+
+{% macro nav_class(m) %}
+    {% if m.own_members %}
+        <details class="nav-class">
+            <summary><a class="class" href="#{{ m.qualname }}">{{ m.name }}</a></summary>
+            {{ nav_class_members(m.own_members) }}
+        </details>
+    {% else %}
+        <a class="class" href="#{{ m.qualname }}">{{ m.name }}</a>
+    {% endif %}
+{% endmacro %}
+
+{% macro nav_group(label, items) %}
+    {% if items %}
+        <details class="nav-group" open>
+            <summary>{{ label }} <span class="nav-count">{{ items | length }}</span></summary>
+            <ul class="memberlist">
+                {% for m in items %}
+                    <li>
+                        {% if m.kind == "class" %}
+                            {{ nav_class(m) }}
+                        {% else %}
+                            <a class="{{ m.kind }}" href="#{{ m.qualname }}">{{ m.name }}</a>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </details>
+    {% endif %}
+{% endmacro %}
+
 {% block nav_members %}
     {% if module.members %}
+        {% set public = [] %}
+        {% for m in module.members.values() if is_public(m) | trim %}
+            {% set _ = public.append(m) %}
+        {% endfor %}
         <h2>Radtel RT-950 Pro driver for CHIRP</h2>
-        {{ nav_members(module.members.values()) }}
+        <div class="nav-tools">
+            <button type="button" data-nav="open">Expand all</button>
+            <button type="button" data-nav="close">Collapse all</button>
+        </div>
+        {{ nav_group("Classes", public | selectattr("kind", "equalto", "class") | list) }}
+        {{ nav_group("Functions", public | selectattr("kind", "equalto", "function") | list) }}
+        {{ nav_group("Variables", public | selectattr("kind", "equalto", "variable") | list) }}
     {% endif %}
+{% endblock %}
+
+{% block style %}
+    {{ super() }}
+    <style>
+        nav details > summary { cursor: pointer; list-style: none; }
+        nav details > summary::-webkit-details-marker { display: none; }
+        nav details > summary::before {
+            content: "\25B8"; display: inline-block; width: 1em;
+            transition: transform .15s; color: var(--muted, #888);
+        }
+        nav details[open] > summary::before { transform: rotate(90deg); }
+        nav .nav-group > summary { font-weight: bold; margin: .6rem 0 .2rem; }
+        nav.pdoc .nav-group .memberlist { margin-left: 0; padding-left: .6rem; }
+        nav.pdoc .nav-group li a { padding: .15rem 0 .15rem 1.2rem; }
+        nav.pdoc .nav-group summary > a { display: inline; padding: .15rem 0; }
+        nav.pdoc .nav-group .class:before { content: none; }
+        nav.pdoc .nav-class > .memberlist { padding-left: 1.2rem; }
+        nav .nav-count { font-weight: normal; color: var(--muted, #888); font-size: .85em; }
+        nav .nav-tools { display: flex; gap: .4rem; margin-bottom: .4rem; }
+        nav .nav-tools button {
+            font-size: .8em; padding: .15rem .5rem; cursor: pointer;
+            border: 1px solid var(--accent2, #ccc); border-radius: 4px;
+            background: transparent; color: inherit;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    {{ super() }}
+    <script>
+        /* Side menu: "Expand all" / "Collapse all" buttons; a click on a class
+           name also opens its member list; the menu opens the section that
+           holds the current anchor (direct links, back/forward). */
+        (function () {
+            var nav = document.querySelector("nav.pdoc");
+            if (!nav) { return; }
+            nav.addEventListener("click", function (ev) {
+                var link = ev.target.closest("summary > a");
+                if (link) {
+                    link.closest("details").open = true;
+                    return;
+                }
+                var b = ev.target.closest("button[data-nav]");
+                if (!b) { return; }
+                var open = b.getAttribute("data-nav") === "open";
+                nav.querySelectorAll("details").forEach(function (d) { d.open = open; });
+            });
+            function reveal() {
+                var id = decodeURIComponent(location.hash.slice(1));
+                if (!id) { return; }
+                nav.querySelectorAll("a[href]").forEach(function (a) {
+                    if (a.getAttribute("href") !== "#" + id) { return; }
+                    for (var d = a.closest("details"); d; d = d.parentElement.closest("details")) {
+                        d.open = true;
+                    }
+                });
+            }
+            window.addEventListener("hashchange", reveal);
+            reveal();
+        })();
+    </script>
 {% endblock %}
