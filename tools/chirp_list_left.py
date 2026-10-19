@@ -18,10 +18,21 @@ import shutil
 import sys
 
 OLD = "wx.Treebook(self, style=wx.NB_RIGHT)"
+"""The line in CHIRP's ``main.py`` that puts the zone list on the right."""
 NEW = "wx.Treebook(self, style=wx.NB_LEFT)"
+"""Its replacement: the zone list on the left."""
 
 
 def find_main():
+    """Locate CHIRP's ``wxui/main.py`` in the pipx installation.
+
+    Returns:
+        str: Path of the first match of
+        ``~/.local/share/pipx/venvs/chirp/lib/python3*/site-packages/chirp/wxui/main.py``.
+
+    Raises:
+        SystemExit: If no such file exists.
+    """
     pattern = os.path.expanduser(
         "~/.local/share/pipx/venvs/chirp/lib/python3*/site-packages/chirp/wxui/main.py")
     hits = glob.glob(pattern)
@@ -30,7 +41,16 @@ def find_main():
     return hits[0]
 
 
-def main():
+def main() -> None:
+    """Apply the patch, or restore the backup with ``--restore``.
+
+    Applying makes ``main.py.orig`` once, then replaces ``OLD`` with ``NEW``;
+    nothing is changed if the patch is already applied.
+
+    Raises:
+        SystemExit: If CHIRP is not found, ``--restore`` finds no backup, or
+            ``OLD`` does not occur exactly once (other CHIRP version).
+    """
     path = find_main()
     backup = path + ".orig"
     if "--restore" in sys.argv:

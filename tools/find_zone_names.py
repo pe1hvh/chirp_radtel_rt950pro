@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Search the RT-950 Pro address space for known text. READ-ONLY.
+r"""Search the RT-950 Pro address space for known text. READ-ONLY.
 
 Reads 0x80-byte blocks from address ranges the driver does not read, searches
 them for the given strings (e.g. your zone names) and writes a dump of all
@@ -8,7 +8,7 @@ non-empty blocks. Nothing is written to the radio.
 This is how the zone-name address (0xC000) was found.
 
 Usage (with CHIRP's Python, which has pyserial):
-    ~/.local/share/pipx/venvs/chirp/bin/python tools/find_zone_names.py \\
+    ~/.local/share/pipx/venvs/chirp/bin/python tools/find_zone_names.py \
         /dev/ttyUSB0 "MyZone1" "MyZone2"
 
 Close CHIRP first so the serial port is free.
@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import serial  # noqa: E402
 import radtel_rt950pro as drv  # noqa: E402
 
-# (read command, start, end) - ranges the driver does not (fully) read
 RANGES = [
     (0x52, 0x8100, 0x9000),
     (0x52, 0x9100, 0xA000),
@@ -30,15 +29,46 @@ RANGES = [
     (0x52, 0xD300, 0x10000),
     (0x54, 0x0080, 0x1000),
 ]
+"""Address ranges the driver does not (fully) read, as ``(read command,
+start, end)``; ``end`` is exclusive."""
 
 
 def read_block(transport, cmd, addr):
+    """Read one 0x80-byte block and return it XOR-decoded.
+
+    Uses the transport's private helpers, as the driver's ``read_clone``
+    does, but for a single address.
+
+    Args:
+        transport: A :class:`radtel_rt950pro.CloneSerialTransport` after
+            ``handshake()``.
+        cmd: Read command, ``0x52`` (main space) or ``0x54`` (APRS space).
+        addr: Radio address of the block.
+
+    Returns:
+        bytes: The 0x80 decoded payload bytes.
+
+    Raises:
+        radtel_rt950pro.CloneTransportError: On a timeout.
+    """
     transport._write(bytes((cmd, (addr >> 8) & 0xFF, addr & 0xFF, drv.READ_BLOCK)))
     block = transport._read_exact(drv.BLOCK_HEADER + drv.READ_BLOCK)
     return bytes(transport._apply_xor(bytearray(block[drv.BLOCK_HEADER:])))
 
 
 def main():
+    """Scan ``RANGES`` for the strings on the command line and dump the blocks.
+
+    Command line: ``port string [string ...]``; with fewer arguments the
+    module docstring is printed and the program exits. Strings are matched
+    as ASCII. The scan stops at the first failed read (the radio then needs
+    a power cycle). Every block that is not all ``0xFF`` or all ``0x00`` is
+    written as hex and ASCII to ``rt950_dump_YYYYMMDD_HHMMSS.txt`` in the
+    current directory.
+
+    Raises:
+        SystemExit: With the usage text if arguments are missing.
+    """
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     needles = [arg.encode("ascii") for arg in sys.argv[2:]]

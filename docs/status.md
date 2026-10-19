@@ -5,14 +5,14 @@ Base: experimental driver by 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @254d
 
 ## This repository
 - Name: `chirp_radtel_rt950pro`, one clean first commit (0.1.0), author PE1HVH, MIT with copyright Nathan Barguss 2025 + PE1HVH 2026. No Claude lines in the commit.
-- Content: radtel_rt950pro.py (single file), LICENSE, README (English), CHANGELOG, docs/memory-map.md, docs/protocol.md, tools/ (find_zone_names, make_sample_image, chirp_list_left), tests/ (neutral test set: VHF-LOCAL and UHF-LOCAL).
+- Content: radtel_rt950pro.py (single file), LICENSE, README (English), CHANGELOG, docs/memory-map.md, docs/protocol.md, tools/ (find_zone_names, raw_dump, ident_dump, check_docstrings, make_sample_image, chirp_list_left, diagram generators), tests/ (neutral test set: VHF-LOCAL and UHF-LOCAL).
 - Installation in the README: (1) Help → Load module from issue 12180 (per session, only while the issue is open, warning "not a recognized CHIRP developer"); (2) copy to `~/.local/share/pipx/venvs/chirp/lib/python3.*/site-packages/chirp/drivers/` (may be gone after a reinstall or a new Python version; not for the Windows installer).
 - No dependencies other than CHIRP (with pyserial); pytest only for the tests; Python ≥ 3.10.
 
 ## Code quality (2026-10-18)
-- pylint 10.00/10 (default settings, max. 100 characters), pydocstyle Google convention clean, pydoc works with and without CHIRP and without pyserial.
+- pylint 10.00/10 (default settings, max. 100 characters), pydocstyle Google convention clean, pydoc works with and without CHIRP and without pyserial. Without CHIRP the radio cannot be used: `get_features`, `get_settings`, `get_memory` and `set_memory` raise `RadioError` (0.1.6).
 - One `__all__` with the complete public API (previously the last `__all__ = ["RT950ProRadio"]` overwrote the others, so pydoc showed only that class).
-- Google-style docstrings for all classes, functions (including private and nested ones) and module constants.
+- Google-style docstrings for all classes, functions (including private and nested ones, and the CHIRP stand-ins) and module constants; since 0.1.6 enforced by `tools/check_docstrings.py` for the driver, `tools/*.py` and `docs/build.py`.
 - Behaviour demonstrably unchanged: an AST diff without docstrings shows only intended changes; an old/new comparison through real CHIRP (read, memories, set_memory, zones, settings, write plan) is byte-identical.
 - Fixed latent bug: `get_logger` did not exist (NameError for a transport without a logger).
 - CHIRP's own style check (tools/cpep8.py, pep8/flake8) uses 79 characters; reformat before a PR.
@@ -51,7 +51,7 @@ DCS list in the driver: 210 codes; index 1–105 = N, 106–210 = I (polarity "I
 2. *Fixed in 0.1.5* (I↔R translated; checked on a radio). DCS polarity: the radio uses "I", CHIRP "R". Inverted DCS from the radio gives CHIRP polarity "IN"/"NI" (invalid); "R" from CHIRP raises `ValueError: Unsupported DCS code D023R` when encoding. Fixed by translating I↔R in `_tone_to_chirp` and `_tone_from_chirp`.
 3. *Fixed in 0.1.5* (CHIRP `Cross` with all its cross modes; checked on a radio). Tones without CHIRP "Cross": RX-only tone and mixed CTCSS/DCS are lost when such a channel is edited.
 4. *Fixed in 0.1.5* (only changed settings are applied). Settings apply turns "not set" (0xFF) into a default value (e.g. APRS → write_aprs becomes True after merely opening and applying).
-5. `_ToneInfo` is unused.
+5. *Removed in 0.1.6.* `_ToneInfo` was unused.
 6. *Fixed in 0.1.5.* VFO power is always decoded as HIGH: `parse_vfo_section` uses `min(raw, PowerLevel.HIGH.value)` (= 0). Editing any other VFO field writes High back to byte 16. Fix: `PowerLevel.LOW.value`, as in `ChannelRecord.from_bytes`.
 7. *Fixed in 0.1.5* (only edited fields are written). `encode_modulation_sections` writes unset fields (`None`, parsed from 0x0000/0xFFFF and 0x00/0xFF) as 0x00, so an all-0xFF parameter block changes 144 bytes without any edit; the block is part of every upload.
 8. *Fixed in 0.1.5* (the memory is no longer modified). `RT950ProRadio.set_memory` modifies CHIRP's `FrozenMemory` for a DTCS memory with TX code 0 (`mem.tmode = ""`); fix: work on `mem.dupe()`.
@@ -67,9 +67,8 @@ Bugs 6-10 were found in the independent docstring review of 2026-10-18 and confi
 - Proposal drafted in English for issue #12180 (questions: subclass wanted?, review by Fred?, test image with neutral channels ok?).
 
 ## Open
-- Remove the unused `_ToneInfo` (known bug 5).
 - A VFO tone with a DCS index the driver does not know is shown as OFF; choosing OFF then does not clear it.
 - Find out what `0x9080–0x90FF` is (see the memory map). Since 0.1.5 the driver writes only `0x9000–0x907F` of the function segment.
 - Compare the handshake (PROGRAMBT9000U + XOR) with the RT-920 protocol.
-- Add firmware/layout detection (960 vs 990) before writing.
+- Add firmware/layout detection (960 vs 990) before writing. The firmware version cannot be read with the known commands (`docs/protocol.md`, *Handshake answers*); the 16-byte `F` answer is a candidate if it differs between firmware versions (not tested).
 - Await the maintainers' response to the proposal in #12180.

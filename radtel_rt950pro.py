@@ -4,7 +4,7 @@
 # Copyright (c) 2026 PE1HVH                         (zones, zone names, 990
 #                                                   channels, APRS write, fixes)
 #
-# Version 0.1.5 (see CHANGELOG.md)
+# Version 0.1.6 (see CHANGELOG.md)
 #
 # Licensed under the MIT License; see the LICENSE file for the full text.
 #
@@ -56,6 +56,12 @@ applied in CHIRP only touch the settings that were changed. An edited
 channel record is rebuilt from its fields, keeping the unknown high nibbles
 of bytes 12-13 (see :meth:`ChannelRecord.to_bytes`).
 
+The module needs CHIRP to work with a radio. Without CHIRP it still
+imports (stand-ins for the CHIRP names, for documentation builds), but
+:data:`HAVE_CHIRP` is ``False``; ``get_features``, ``get_settings``,
+``get_memory`` and ``set_memory`` then raise ``RadioError``, other methods
+may fail with ``AttributeError``.
+
 See ``docs/memory-map.md`` and ``docs/protocol.md`` in the repository for
 the byte-level reference.
 
@@ -90,7 +96,7 @@ try:
 except ImportError:  # pragma: no cover - pydoc/doc builds without pyserial
     serial = None  # pylint: disable=invalid-name
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 """Driver version (semantic versioning); equal to the latest entry in
 ``CHANGELOG.md`` and to the release tag ``v<version>`` on GitHub.
 
@@ -154,6 +160,8 @@ __all__ = [
     "DEFAULT_SEGMENTS",
     # CHIRP integration
     "MEM_FORMAT",
+    "HAVE_CHIRP",
+    "VALID_BANDS",
     "RT950ProRadio",
     "RT950ProZoneRadio",
     "RT950ProDriver",
@@ -3838,10 +3846,11 @@ LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # CHIRP compatibility layer
 #
-# Inside CHIRP the real modules are imported. Without CHIRP (unit tests,
-# pydoc, local development) minimal stand-ins with the same names are
-# defined so the module still imports. The stand-ins mimic CHIRP's module
-# and class names, hence the naming-style exceptions below.
+# Inside CHIRP the real modules are imported. Without CHIRP (documentation
+# builds) minimal stand-ins with the same names are defined so the module
+# still imports; the radio cannot be used then (HAVE_CHIRP is False;
+# get_features, get_settings, get_memory and set_memory raise RadioError). The stand-ins mimic CHIRP's module and
+# class names, hence the naming-style exceptions below.
 # ---------------------------------------------------------------------------
 
 try:  # pragma: no cover - executed when real CHIRP is available
@@ -3857,73 +3866,134 @@ try:  # pragma: no cover - executed when real CHIRP is available
         RadioSettings,
     )
 
-except ImportError:  # pragma: no cover - fallback for local development
-    # pylint: disable=missing-function-docstring,unused-argument
+    _CHIRP_IMPORT_ERROR: Optional[ImportError] = None
+    """Why CHIRP could not be imported; ``None`` when it was."""
+
+except ImportError as _chirp_import_error:  # pragma: no cover - documentation builds
+    _CHIRP_IMPORT_ERROR = _chirp_import_error
+    # The stand-ins keep CHIRP's signatures, so some arguments are unused.
+    # pylint: disable=unused-argument
 
     class _Memory:
-        """Stand-in for ``chirp_common.Memory``."""
+        """Stand-in for ``chirp_common.Memory``: plain attributes, not all the driver sets."""
 
         def __init__(self) -> None:
+            """Create a memory with zero or blank fields.
+
+            These are not CHIRP's defaults; ``empty`` is ``False``.
+            """
             self.number = 0
+            """Memory number."""
             self.freq = 0
+            """Receive frequency in Hz."""
             self.offset = 0
+            """Offset in Hz, or the TX frequency for ``split``."""
             self.duplex = ""
+            """``""``, ``"+"``, ``"-"`` or ``"split"``."""
             self.tmode = ""
+            """CHIRP tone mode, e.g. ``"Tone"``."""
             self.rtone = 0.0
+            """Tone-mode CTCSS tone in Hz."""
             self.ctone = 0.0
+            """TSQL CTCSS tone in Hz."""
             self.dtcs = 0
+            """DCS code."""
             self.dtcs_pol = "N"
+            """DCS polarity; CHIRP's attribute is ``dtcs_polarity`` (e.g. ``"NN"``)."""
             self.mode = "FM"
+            """Modulation."""
             self.power = ""
+            """Power level."""
             self.skip = ""
+            """``""`` scanned or ``"S"`` skipped."""
             self.name = ""
+            """Channel name."""
             self.empty = False
+            """``True`` for an unused memory."""
             self.extra = {}
+            """Extra per-memory settings."""
 
     class _RadioFeatures:
-        """Stand-in for ``chirp_common.RadioFeatures``."""
+        """Stand-in for ``chirp_common.RadioFeatures``: plain attributes."""
 
         def __init__(self) -> None:
+            """Set the attributes the driver reads or overwrites."""
             self.has_bank = False
+            """Banks supported."""
             self.has_bank_names = False
+            """Bank names supported."""
             self.has_name = True
+            """Channel names supported."""
             self.has_ctone = True
+            """Separate TSQL tone supported."""
             self.has_dtcs = True
+            """DCS supported."""
             self.has_dtcs_polarity = True
+            """DCS polarity supported."""
             self.has_mode = True
+            """Modulation selectable."""
             self.has_offset = True
+            """Offset supported."""
             self.has_tuning_step = False
+            """Per-channel tuning step supported."""
             self.can_delete = True
+            """Memories can be erased."""
             self.can_odd_split = True
+            """``split`` (any TX frequency) supported."""
             self.memory_bounds = (0, 0)
+            """First and last memory number."""
             self.valid_bands = []
+            """``(low, high)`` bands in Hz."""
             self.valid_duplexes = ["", "+", "-", "split"]
+            """Allowed duplex values."""
             self.valid_tmodes = ["", "Tone", "TSQL", "DTCS", "Cross"]
+            """Allowed tone modes."""
             self.valid_modes = ["FM", "NFM", "AM"]
+            """Allowed modulations."""
             self.valid_power_levels = ["Low", "Medium", "High"]
+            """Allowed power levels."""
             self.valid_skips = ["", "S"]
+            """Allowed skip values."""
             self.valid_name_length = 12
+            """Maximum name length in characters."""
 
     class _CloneModeRadio:
-        """Stand-in for ``chirp_common.CloneModeRadio``.
-
-        Args:
-            *args: Positional arguments; ignored.
-            **kwargs: Keyword arguments; only ``pipe`` is used and stored as ``self.pipe``.
-        """
+        """Stand-in for ``chirp_common.CloneModeRadio``."""
 
         VENDOR = ""
+        """Vendor name; set by the driver class."""
         MODEL = ""
+        """Model name; set by the driver class."""
         BAUD_RATE = 115200
+        """Serial speed in baud."""
 
         def __init__(self, *args, **kwargs) -> None:
+            """Store ``pipe`` if given as keyword.
+
+            Unlike CHIRP's base class, a positional port is ignored and
+            nothing is loaded.
+
+            Args:
+                *args: Positional arguments; ignored.
+                **kwargs: Keyword arguments; only ``pipe`` is used and stored
+                    as ``self.pipe``.
+            """
             self.pipe = kwargs.get("pipe")
+            """Serial port object, or ``None``."""
 
     class _Directory:
         """Stand-in for ``chirp.directory``."""
 
         @staticmethod
         def register(radio_class):
+            """Return ``radio_class`` unchanged; nothing is registered.
+
+            Args:
+                radio_class: The driver class being decorated.
+
+            Returns:
+                type: ``radio_class`` itself.
+            """
             return radio_class
 
     class _Errors:
@@ -3933,37 +4003,59 @@ except ImportError:  # pragma: no cover - fallback for local development
             """Stand-in for ``chirp.errors.RadioError``."""
 
     class _MemoryMapBytes(bytearray):
-        """Stand-in for ``chirp.memmap.MemoryMapBytes``."""
+        """Stand-in for ``chirp.memmap.MemoryMapBytes``: a mutable byte buffer."""
 
         def get_packed(self):
+            """Return the buffer as bytes.
+
+            Returns:
+                bytes: A copy of the buffer.
+            """
             return bytes(self)
 
     class memmap:  # type: ignore  # pylint: disable=invalid-name
         """Stand-in for the ``chirp.memmap`` module."""
 
         MemoryMapBytes = _MemoryMapBytes
+        """The stand-in memory map class."""
 
     class _PowerLevel(str):
-        """Stand-in for ``chirp_common.PowerLevel``."""
+        """Stand-in for ``chirp_common.PowerLevel``: a label with ``watts``."""
 
         def __new__(cls, label, watts=0.0):
+            """Create the level as a string with a ``watts`` attribute.
+
+            Args:
+                label: Display label, e.g. ``"High"``.
+                watts: Nominal power in watts.
+
+            Returns:
+                _PowerLevel: The new level.
+            """
             obj = str.__new__(cls, label)
             obj.watts = watts
             return obj
 
     class _RadioSettingValue:
-        """Stand-in base for ``chirp.settings.RadioSettingValue*``.
-
-        Args:
-            value: Initial current value.
-        """
+        """Stand-in base for ``chirp.settings.RadioSettingValue*``."""
 
         def __init__(self, value=None):
+            """Store the initial value; the value starts editable.
+
+            Args:
+                value: Initial current value.
+            """
             self._value = value
+            """Current value."""
             self._mutable = True
+            """``False`` after ``set_mutable(False)``."""
 
         def initialize(self):
-            pass
+            """Do nothing.
+
+            In CHIRP it sets the value stashed by ``queue_current``; the
+            stand-in stores that value at once.
+            """
 
         def set_mutable(self, mutable):
             """Mark the value as editable or read-only, as CHIRP does.
@@ -3982,72 +4074,131 @@ except ImportError:  # pragma: no cover - fallback for local development
             return self._mutable
 
         def set_value(self, value):
+            """Store ``value`` without checks.
+
+            Args:
+                value: New value.
+            """
             self._value = value
 
         def get_value(self):
+            """Return the current value.
+
+            Returns:
+                object: The stored value.
+            """
             return self._value
 
         def queue_current(self, value):
+            """Store ``value`` at once (CHIRP stashes it until ``initialize``).
+
+            Args:
+                value: New value.
+            """
             self._value = value
 
         def __int__(self):
+            """Return the value as an integer.
+
+            Returns:
+                int: ``int(value)``.
+            """
             return int(self._value)
 
         def __bool__(self):
+            """Return the value as a boolean.
+
+            Returns:
+                bool: ``bool(value)``.
+            """
             return bool(self._value)
 
         def __str__(self):
+            """Return the value as text.
+
+            Returns:
+                str: ``str(value)``.
+            """
             return str(self._value)
 
     class RadioSettingValueBoolean(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueBoolean``.
-
-        Args:
-            current: Initial value; stored as ``bool(current)``.
-            mem_vals: Ignored by the stand-in.
-        """
+        """Stand-in for ``chirp.settings.RadioSettingValueBoolean``."""
 
         def __init__(self, current, mem_vals=(0, 1)):
+            """Store ``bool(current)``.
+
+            Args:
+                current: Initial value; stored as ``bool(current)``.
+                mem_vals: Ignored by the stand-in.
+            """
             super().__init__(bool(current))
 
         def set_value(self, value):
+            """Store ``bool(value)``.
+
+            Args:
+                value: New value.
+            """
             super().set_value(bool(value))
 
     class RadioSettingValueInteger(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueInteger``.
-
-        Args:
-            minval: Lowest value accepted by ``set_value``.
-            maxval: Highest value accepted by ``set_value``.
-            current: Initial value; stored as ``int(current)``.
-            step: Ignored by the stand-in.
-        """
+        """Stand-in for ``chirp.settings.RadioSettingValueInteger``."""
 
         def __init__(self, minval, maxval, current, step=1):
+            """Store the range and ``int(current)``.
+
+            Args:
+                minval: Lowest value accepted by ``set_value``.
+                maxval: Highest value accepted by ``set_value``.
+                current: Initial value; stored as ``int(current)``.
+                step: Ignored by the stand-in.
+            """
             self._min = minval
+            """Lowest accepted value."""
             self._max = maxval
+            """Highest accepted value."""
             super().__init__(int(current))
 
         def set_value(self, value):
+            """Store ``int(value)`` if it lies within the range.
+
+            Args:
+                value: New value.
+
+            Raises:
+                ValueError: If ``int(value)`` fails or lies outside
+                    ``minval``-``maxval``.
+            """
             value = int(value)
             if value < self._min or value > self._max:
                 raise ValueError
             super().set_value(value)
 
     class RadioSettingValueList(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueList``.
-
-        Args:
-            choices: Allowed values, in display order.
-            current_index: Index into ``choices`` of the initial value.
-        """
+        """Stand-in for ``chirp.settings.RadioSettingValueList``."""
 
         def __init__(self, choices, current_index=0):
+            """Store the choices and select ``choices[current_index]``.
+
+            Args:
+                choices: Allowed values, in display order.
+                current_index: Index into ``choices`` of the initial value.
+            """
             self.choices = list(choices)
+            """Allowed values, in display order."""
             index = int(current_index) if self.choices else 0
             super().__init__(self.choices[index] if self.choices else None)
 
         def set_value(self, value):
+            """Select a choice by index or by value.
+
+            Args:
+                value: Index into ``choices`` (``int``) or one of the choices.
+
+            Raises:
+                ValueError: If the index is out of range or the value is not
+                    one of the choices.
+            """
             if isinstance(value, int):
                 if value < 0 or value >= len(self.choices):
                     raise ValueError
@@ -4058,58 +4209,102 @@ except ImportError:  # pragma: no cover - fallback for local development
                 self._value = value
 
         def __int__(self):
+            """Return the index of the current value in ``choices``.
+
+            Returns:
+                int: The index.
+
+            Raises:
+                ValueError: If the current value is not one of the choices.
+            """
             if self._value in self.choices:
                 return self.choices.index(self._value)
             raise ValueError
 
     class RadioSettingValueString(_RadioSettingValue):
-        """Stand-in for ``chirp.settings.RadioSettingValueString``.
-
-        Args:
-            minlength: Ignored by the stand-in.
-            maxlength: Maximum length accepted by ``set_value``.
-            current: Initial text; ``None`` or empty becomes ``""``.
-            autopad: Stored as ``self.autopad``; not otherwise used.
-            charset: Ignored by the stand-in.
-            mem_pad_char: Stored as ``self.mem_pad_char``; not otherwise used.
-        """
+        """Stand-in for ``chirp.settings.RadioSettingValueString``."""
 
         def __init__(self, minlength, maxlength, current, autopad=True,
                      charset=None, mem_pad_char=' '):
+            """Store the limits and the initial text.
+
+            Args:
+                minlength: Ignored by the stand-in.
+                maxlength: Maximum length accepted by ``set_value``.
+                current: Initial text; ``None`` or empty becomes ``""``.
+                autopad: Stored as ``self.autopad``; not otherwise used.
+                charset: Ignored by the stand-in.
+                mem_pad_char: Stored as ``self.mem_pad_char``; not otherwise used.
+            """
             self.maxlength = maxlength
+            """Maximum length accepted by ``set_value``."""
             self.autopad = autopad
+            """Stored only."""
             self.mem_pad_char = mem_pad_char
+            """Stored only."""
             super().__init__(current or "")
 
         def set_value(self, value):
+            """Store ``str(value)`` if it is not too long.
+
+            Args:
+                value: New text.
+
+            Raises:
+                ValueError: If the text is longer than ``maxlength``.
+            """
             value = str(value)
             if len(value) > self.maxlength:
                 raise ValueError
             super().set_value(value)
 
     class RadioSettingGroup:
-        """Stand-in for ``chirp.settings.RadioSettingGroup``.
-
-        Args:
-            name: Internal group name.
-            label: Display label.
-            *elements: Initial child settings or groups, appended in order.
-        """
+        """Stand-in for ``chirp.settings.RadioSettingGroup``."""
 
         def __init__(self, name, label, *elements):
+            """Store name and label and append ``elements`` in order.
+
+            Args:
+                name: Internal group name.
+                label: Display label.
+                *elements: Initial child settings or groups, appended in order.
+            """
             self.name = name
+            """Internal group name."""
             self.label = label
+            """Display label."""
             self._children = []
+            """Child settings and groups, in order."""
             for element in elements:
                 self.append(element)
 
         def append(self, element):
+            """Add a child setting or group at the end.
+
+            Args:
+                element: A ``RadioSetting`` or ``RadioSettingGroup``.
+            """
             self._children.append(element)
 
         def __iter__(self):
+            """Iterate over the direct children.
+
+            Returns:
+                Iterator: Over the children, in order.
+            """
             return iter(self._children)
 
         def get(self, name, default=None):
+            """Return the value of the direct child setting called ``name``.
+
+            Args:
+                name: Setting name.
+                default: Returned when no direct child has that name.
+
+            Returns:
+                object: The setting's ``get_value()`` (or its value object
+                if it has none), or ``default``.
+            """
             for child in self._children:
                 if isinstance(child, RadioSetting) and child.name == name:
                     value_obj = getattr(child, 'value', None)
@@ -4119,12 +4314,29 @@ except ImportError:  # pragma: no cover - fallback for local development
             return default
 
         def __getitem__(self, name):
+            """Return the value of the direct child setting called ``name``.
+
+            Args:
+                name: Setting name.
+
+            Returns:
+                object: As :meth:`get`.
+
+            Raises:
+                KeyError: If no direct child has that name or its value is
+                    ``None``.
+            """
             result = self.get(name, None)
             if result is None:
                 raise KeyError(name)
             return result
 
-        def walk(self):
+        def walk(self) -> Iterable["RadioSetting"]:
+            """Yield every setting in the tree, depth first.
+
+            Yields:
+                RadioSetting: Each setting below this group, in order.
+            """
             for child in self._children:
                 if isinstance(child, RadioSetting):
                     yield child
@@ -4132,66 +4344,120 @@ except ImportError:  # pragma: no cover - fallback for local development
                     yield from child.walk()
 
     class RadioSetting(RadioSettingGroup):
-        """Stand-in for ``chirp.settings.RadioSetting``.
-
-        Args:
-            name: Internal setting name.
-            label: Display label.
-            value: The ``RadioSettingValue*`` object holding the value.
-        """
+        """Stand-in for ``chirp.settings.RadioSetting``."""
 
         def __init__(self, name, label, value):
+            """Store the setting with ``value`` as its only child.
+
+            Args:
+                name: Internal setting name.
+                label: Display label.
+                value: The ``RadioSettingValue*`` object holding the value.
+            """
             super().__init__(name, label, value)
             self._value = value
+            """The ``RadioSettingValue*`` object."""
             self._apply = None
+            """Apply callback without arguments, or ``None``."""
 
         @property
         def value(self):
+            """The ``RadioSettingValue*`` object holding the value."""
             return self._value
 
         def set_apply_callback(self, callback, *args):
+            """Register ``callback(setting, *args)`` to run on apply.
+
+            Args:
+                callback: Function called with this setting and ``args``.
+                *args: Extra arguments passed to ``callback``.
+            """
             self._apply = lambda: callback(self, *args)
 
         def has_apply_callback(self):
+            """Return whether an apply callback is registered.
+
+            Returns:
+                bool: ``True`` after :meth:`set_apply_callback`.
+            """
             return self._apply is not None
 
         def run_apply_callback(self):
+            """Run the apply callback, if any."""
             if self._apply:
                 self._apply()
 
         def get_name(self):
+            """Return the internal setting name.
+
+            Returns:
+                str: ``self.name``.
+            """
             return self.name
 
     class RadioSettings(RadioSettingGroup):
-        """Stand-in for ``chirp.settings.RadioSettings``.
-
-        Args:
-            *groups: Top-level setting groups, appended in order.
-        """
+        """Stand-in for ``chirp.settings.RadioSettings``."""
 
         def __init__(self, *groups):
+            """Create the root group ``root`` holding ``groups``.
+
+            Args:
+                *groups: Top-level setting groups, appended in order.
+            """
             super().__init__('root', 'root', *groups)
 
     class chirp_common:  # type: ignore  # pylint: disable=invalid-name
         """Stand-in for the ``chirp.chirp_common`` module.
 
-        Lacks ``Status``, ``DTCS_CODES`` and ``CHARSET_ASCII``, so
-        ``get_features``, ``get_settings`` and ``get_memory`` of a non-empty
-        channel fail without CHIRP. It exists for documentation builds.
+        Only enough to import the module and build the documentation. It
+        lacks, among others, ``Status``, ``DTCS_CODES``, ``CHARSET_ASCII``,
+        ``CROSS_MODES``, ``is_split`` and ``split_tone_decode``/``encode``.
+        ``get_features``, ``get_settings``, ``get_memory`` and ``set_memory``
+        check :data:`HAVE_CHIRP` and raise a ``RadioError``; other methods may
+        fail with ``AttributeError``.
         """
 
         Memory = _Memory
+        """The stand-in memory class."""
         RadioFeatures = _RadioFeatures
+        """The stand-in features class."""
         CloneModeRadio = _CloneModeRadio
+        """The stand-in radio base class."""
         PowerLevel = _PowerLevel
+        """The stand-in power level class."""
 
         @staticmethod
         def format_freq(hz):
+            """Format a frequency in Hz as MHz with six decimals.
+
+            Args:
+                hz: Frequency in Hz; ``None`` or ``""`` counts as 0.
+
+            Returns:
+                str: E.g. ``"145.500000"`` for 145500000.
+            """
             hz = 0 if hz in (None, "") else int(hz)
             return f"{hz / 1_000_000:.6f}"
 
         @staticmethod
         def parse_freq(text):
+            """Parse a frequency text into Hz.
+
+            Without a unit or with ``MHz`` the number is MHz, e.g.
+            ``"145.5"``, unless it is at least 1000000, then it is Hz.
+            ``kHz`` and ``Hz`` suffixes are accepted too; units are
+            case-insensitive.
+
+            Args:
+                text: The frequency text; empty gives 0.
+
+            Returns:
+                int: The frequency in Hz, rounded.
+
+            Raises:
+                ValueError: If the text is not a number or is negative.
+                OverflowError: If the number is infinite (e.g. ``"inf"``).
+            """
             value = str(text).strip().lower()
             if not value:
                 return 0
@@ -4219,7 +4485,34 @@ except ImportError:  # pragma: no cover - fallback for local development
 
     directory = _Directory()  # type: ignore
     errors = _Errors()  # type: ignore
-    # pylint: enable=missing-function-docstring,unused-argument
+    # pylint: enable=unused-argument
+
+HAVE_CHIRP: bool = _CHIRP_IMPORT_ERROR is None
+"""``True`` when the real CHIRP modules were imported.
+
+``False`` means the stand-ins above are in use: the module imports (for
+documentation builds) but :meth:`RT950ProRadio.get_features`,
+:meth:`RT950ProRadio.get_settings`, :meth:`RT950ProRadio.get_memory` and
+:meth:`RT950ProRadio.set_memory` (and the same methods of a zone) raise
+``RadioError``."""
+
+
+def _require_chirp(what: str) -> None:
+    """Raise a clear error when CHIRP is not available.
+
+    Args:
+        what: Name of the method that needs CHIRP, used in the message.
+
+    Raises:
+        RadioError: If :data:`HAVE_CHIRP` is ``False``; the message names
+            ``what`` and the original import error.
+    """
+    if not HAVE_CHIRP:
+        raise errors.RadioError(
+            f"{what} needs CHIRP, which could not be imported "
+            f"({_CHIRP_IMPORT_ERROR}); without CHIRP the driver only loads "
+            "for documentation builds"
+        )
 
 # ---------------------------------------------------------------------------
 # Constants and lookup tables for the CHIRP layer
@@ -5521,28 +5814,31 @@ def _build_clone_payload(image: RadioImage) -> bytes:
         )
     return bytes(payload)
 
-@dataclass
-class _ToneInfo:
-    """Tone fields in CHIRP terms.
-
-    Not used by the current driver code.
-    """
-
-    mode: str = ""
-    """CHIRP tone mode (``""``, ``"Tone"``, ``"TSQL"``, ``"DTCS"``)."""
-    rtone: float = 0.0
-    """CHIRP ``rtone`` in Hz (Tone-mode tone; TX CTCSS in this driver's mapping)."""
-    ctone: float = 0.0
-    """CHIRP ``ctone`` in Hz (TSQL tone; RX CTCSS in this driver's mapping)."""
-    dtcs: int = 0
-    """DCS code."""
-    polarity: str = "N"
-    """CHIRP two-letter DCS polarity, e.g. ``"NN"``."""
-
 # ---------------------------------------------------------------------------
 # Driver implementation -----------------------------------------------------
 
 # ---------------------------------------------------------------------------
+
+VALID_BANDS: Tuple[Tuple[int, int], ...] = (
+    (18_000_000, 64_000_000),  # Low HF confirmed RX/TX (FM only)
+    (118_000_000, 137_000_000),  # Airband RX (AM only, TX disabled)
+    (70_000_000, 118_000_000),  # Lower VHF before airband
+    (136_000_000, 174_000_000),
+    (174_000_000, 400_000_000),
+    (400_000_000, 480_000_000),
+    (480_000_000, 580_000_000),
+)
+"""Frequency bands offered to CHIRP, as ``(low, high)`` in Hz.
+
+``is_split`` treats ``high`` as inclusive, CHIRP's ``validate_memory`` as
+exclusive.
+
+Used for ``RadioFeatures.valid_bands`` and to decide when a channel is shown
+as ``split``: RX and TX not inside one common band (CHIRP's
+``chirp_common.is_split``). The bands are the driver's, not the amateur
+bands: 136-174 MHz and 174-400 MHz are each one band, so RX 145 MHz with
+TX 222 MHz is split, RX 145.6 with TX 145.0 MHz is not. The bands overlap at
+136-137 MHz."""
 
 # Raw view of the clone image for CHIRP's developer-mode Browser tab.
 # The driver itself works on RadioImage; this layout is for inspection only.
@@ -5772,21 +6068,17 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         Returns:
             chirp_common.RadioFeatures: Bands, modes, tones, power levels
             and name rules for this radio.
+
+        Raises:
+            RadioError: If CHIRP is not available.
         """
+        _require_chirp("get_features")
         # RadioFeatures accepts its attributes via __setattr__.
         # pylint: disable=attribute-defined-outside-init
         rf = chirp_common.RadioFeatures()
         # 1-based: memory 1 = zone 1 ch 1, memory 100 = zone 2 ch 1, ...
         rf.memory_bounds = (1, CHANNEL_COUNT)
-        rf.valid_bands = [
-            (18_000_000, 64_000_000),   # Low HF confirmed RX/TX (FM only)
-            (118_000_000, 137_000_000), # Airband RX (AM only, TX disabled)
-            (70_000_000, 118_000_000),  # Lower VHF before airband
-            (136_000_000, 174_000_000),
-            (174_000_000, 400_000_000),
-            (400_000_000, 480_000_000),
-            (480_000_000, 580_000_000),
-        ]
+        rf.valid_bands = list(VALID_BANDS)
         rf.has_bank = False
         rf.has_bank_names = False
         # Each zone is shown as its own memory tab (channels 1-99)
@@ -6198,8 +6490,9 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             groups (sections absent from the image are skipped).
 
         Raises:
-            RadioError: If no image is loaded.
+            RadioError: If CHIRP is not available or no image is loaded.
         """
+        _require_chirp("get_settings")
         image = self._require_image()
         groups = []
         if getattr(image, 'vfo', None):
@@ -6280,8 +6573,10 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             chirp_common.Memory: The memory, from the cache when available.
 
         Raises:
-            RadioError: If no image is loaded or ``number`` is out of range.
+            RadioError: If CHIRP is not available, no image is loaded or
+                ``number`` is out of range.
         """
+        _require_chirp("get_memory")
         image = self._require_image()
         if not 1 <= number <= len(image.channels):
             raise errors.RadioError(f"Memory index {number} out of range")
@@ -6303,8 +6598,10 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             mem: The CHIRP ``Memory`` to store; ``mem.number`` is 1-990.
 
         Raises:
-            RadioError: If no image is loaded or the number is out of range.
+            RadioError: If CHIRP is not available, no image is loaded or the
+                number is out of range.
         """
+        _require_chirp("set_memory")
         image = self._require_image()
         if not 1 <= mem.number <= len(image.channels):
             raise errors.RadioError(f"Memory index {mem.number} out of range")
@@ -6353,8 +6650,11 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def _apply_offset(self, mem, channel: ChannelRecord) -> None:
         """Derive CHIRP duplex and offset from the RX and TX frequencies.
 
-        Equal or missing TX gives simplex; otherwise ``+`` or ``-`` with the
-        difference as offset.
+        Equal or missing TX gives simplex. When RX and TX lie in different
+        bands of ``VALID_BANDS`` (CHIRP's ``chirp_common.is_split``) the
+        result is ``split`` with the TX frequency as offset, e.g. RX 145.5 /
+        TX 435.0 MHz. Otherwise ``+`` or ``-`` with the difference as
+        offset, e.g. RX 145.6 / TX 145.0 MHz gives ``-`` 600 kHz.
 
         Args:
             mem: The CHIRP ``Memory`` to update (``duplex``, ``offset`` in Hz).
@@ -6364,16 +6664,13 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             mem.duplex = ""
             mem.offset = 0
             return
-        diff = channel.tx_hz - channel.rx_hz
-        if diff > 0 and channel.tx_hz == channel.rx_hz + diff:
-            mem.duplex = "+"
-            mem.offset = abs(diff)
-        elif diff < 0 and channel.tx_hz == channel.rx_hz + diff:
-            mem.duplex = "-"
-            mem.offset = abs(diff)
-        else:
+        if chirp_common.is_split(VALID_BANDS, channel.rx_hz, channel.tx_hz):
             mem.duplex = "split"
             mem.offset = channel.tx_hz
+            return
+        diff = channel.tx_hz - channel.rx_hz
+        mem.duplex = "+" if diff > 0 else "-"
+        mem.offset = abs(diff)
 
     def _apply_tones(self, mem, channel: ChannelRecord) -> None:
         """Translate the channel's TX/RX tones into CHIRP tone fields.
@@ -6570,6 +6867,9 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
         Returns:
             chirp_common.RadioFeatures: The parent's features with memory bounds
             1-99 and no sub-devices or settings.
+
+        Raises:
+            RadioError: If CHIRP is not available.
         """
         rf = super().get_features()
         rf.memory_bounds = (1, ZONE_SIZE)
@@ -6596,8 +6896,10 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
             ``number``.
 
         Raises:
-            RadioError: If ``number`` is out of range or no image is loaded.
+            RadioError: If CHIRP is not available, ``number`` is out of range
+                or no image is loaded.
         """
+        _require_chirp("get_memory")
         if not 1 <= number <= ZONE_SIZE:
             raise errors.RadioError(f"Memory {number} out of range 1-{ZONE_SIZE}")
         mem = self._parent.get_memory(self._first + number).dupe()
@@ -6611,8 +6913,10 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
             mem: The CHIRP ``Memory`` to store; it is copied, not modified.
 
         Raises:
-            RadioError: If the number is out of range or no image is loaded.
+            RadioError: If CHIRP is not available, the number is out of range
+                or no image is loaded.
         """
+        _require_chirp("set_memory")
         if not 1 <= mem.number <= ZONE_SIZE:
             raise errors.RadioError(f"Memory {mem.number} out of range 1-{ZONE_SIZE}")
         # CHIRP passes a frozen Memory: never modify it, work on a copy.

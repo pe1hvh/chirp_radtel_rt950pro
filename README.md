@@ -151,6 +151,8 @@ python docs/build.py        # HTML in ./site
 | `.github/workflows/docs.yml` | builds and publishes the API documentation |
 | `tools/find_zone_names.py` | read-only scan of the radio for known text |
 | `tools/raw_dump.py` | read-only dump of the radio's clone image, XOR-decoded but not re-encoded |
+| `tools/ident_dump.py` | read-only: shows every byte of the radio's handshake answers and searches them for the firmware version |
+| `tools/check_docstrings.py` | reports every module, class and function without a docstring, nested ones included |
 | `tools/make_sample_image.py` | sample `.img` with two invented zones |
 | `tools/chirp_list_left.py` | optional CHIRP patch: zone list on the left |
 | `tools/seqsvg.py` | renders sequence diagrams as SVG (used by `make_diagrams.py`) |
