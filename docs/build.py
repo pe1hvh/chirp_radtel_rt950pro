@@ -259,6 +259,12 @@ def _class_members(node: ast.ClassDef) -> List[dict]:
     members: Dict[str, dict] = {}
 
     def add(name: str, kind: str) -> None:
+        """Record ``name`` with kind ``kind`` unless already listed.
+
+        Args:
+            name: Member name.
+            kind: ``constructor``, ``property``, ``method`` or ``field``.
+        """
         if name not in members:
             members[name] = {"name": name, "kind": kind,
                              "public": _member_is_public(name)}

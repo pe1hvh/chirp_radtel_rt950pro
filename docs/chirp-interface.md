@@ -9,7 +9,7 @@ in [`memory-map.md`](memory-map.md) and the wire protocol in
 
 | | |
 |---|---|
-| Driver | `radtel_rt950pro.py`, version 0.1.5 (2026-10-19) |
+| Driver | `radtel_rt950pro.py`, version 0.1.6 (2026-10-19) |
 | CHIRP reference | `kk7ds/chirp` at commit `0a9be8e` (2026-10-17), wxPython UI (`chirp/wxui`) |
 | Radio | Radtel RT-950 Pro, firmware 0.29 (10 zones × 99 channels) |
 
@@ -291,7 +291,7 @@ and saved in the `.img` metadata. They are never sent to the radio.
 |---|---|
 | `empty` | `True` when `rx_hz` is `None` (RX frequency bytes all `0x00`/`0xFF`); nothing else is filled |
 | `freq` | `rx_hz` |
-| `duplex`, `offset` | TX missing or equal to RX → `""`, 0; TX above RX → `+`, difference; TX below RX → `-`, difference (the `split` branch is not reached from radio data) |
+| `duplex`, `offset` | TX missing or equal to RX → `""`, 0; RX and TX in different bands of `VALID_BANDS` (`chirp_common.is_split`) → `split`, TX frequency; otherwise TX above RX → `+`, difference; TX below RX → `-`, difference |
 | `name` | `name`, stripped |
 | `tmode`, `rtone`, `ctone`, `dtcs`, `rx_dtcs`, `dtcs_polarity` | see §8.3 |
 | `mode` | `AM` if `rx_modulation` is AM, else `NFM` (narrow) or `FM` (wide) |
@@ -554,11 +554,14 @@ When `from chirp import …` fails, the module defines minimal stand-ins for
 `memmap.MemoryMapBytes` and the `chirp.settings` classes. They exist so that
 pydoc and `docs/build.py` can import the module. There is no `bitwise`
 stand-in, so `_parse_memobj()` fails silently and `_memobj` stays `None`.
-The stand-ins lack
-`chirp_common.Status`, `DTCS_CODES` and `CHARSET_ASCII`, so `get_features()`,
-`get_settings()` and `get_memory()` of a non-empty channel do not work
-without CHIRP. The tests in `tests/` therefore run against a CHIRP source
-tree (`CHIRP_SRC`).
+The stand-ins lack, among others, `chirp_common.Status`, `DTCS_CODES`,
+`CHARSET_ASCII`, `CROSS_MODES`, `is_split` and `split_tone_decode`/`encode`.
+`HAVE_CHIRP` is then `False`, and `get_features()`, `get_settings()`,
+`get_memory()` and `set_memory()` raise `RadioError` ("… needs CHIRP …")
+before using them; other methods may fail with `AttributeError`.
+The tests in `tests/` therefore run against a CHIRP source tree
+(`CHIRP_SRC`); `tests/test_cleanup.py` checks the error in a subprocess
+with CHIRP blocked.
 
 ---
 
@@ -598,7 +601,7 @@ Found while tracing the interface; not in the known-issues list of
 
 ## Sources
 
-* Driver: `radtel_rt950pro.py` 0.1.5, `docs/memory-map.md`, `docs/protocol.md`, `docs/status.md`.
+* Driver: `radtel_rt950pro.py` 0.1.6, `docs/memory-map.md`, `docs/protocol.md`, `docs/status.md`.
 * CHIRP: [kk7ds/chirp](https://github.com/kk7ds/chirp) at commit `0a9be8e` —
   `chirp/chirp_common.py` (`CloneModeRadio`, `ExternalMemoryProperties`,
   `Radio.erase_memory`), `chirp/directory.py` (`register`,

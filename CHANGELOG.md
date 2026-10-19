@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.1.6 — 2026-10-19
+
+Clean-up release: split channels shown as split, a clear error without
+CHIRP, a stricter docstring check and a handshake tool. No change to what
+is written to the radio.
+
+### Added
+- `tools/ident_dump.py`: runs only the driver's handshake (handshake
+  string, `F`, `M`, `SEND` key frame, `E`; no memory read or written) and
+  prints every answer in hex and ASCII. With `--expect 0.29` it searches the
+  answers for that firmware version in ASCII, BCD and binary form. The
+  firmware version is not in the clone image read by `raw_dump.py`.
+- `tests/test_ident_dump.py`: tests for the tool with a simulated radio.
+- `docs/protocol.md`: measured handshake answers of a radio with firmware
+  0.29. The `F` answer probably holds the band limits in BCD (136–174,
+  400–520, 200–260 MHz; inference); the firmware version is in none of the
+  answers.
+- `tools/check_docstrings.py`: reports every module, class and function
+  without a docstring, nested functions and the CHIRP stand-ins included
+  (pydocstyle, pylint and pydoclint each miss some of them). Run in the
+  GitHub Action and by `tests/test_check_docstrings.py`.
+- `HAVE_CHIRP` and `VALID_BANDS` in the public API.
+- `tests/test_cleanup.py`: tests for the split display and the run without
+  CHIRP.
+
+### Changed
+- A channel whose RX and TX lie in different bands of `VALID_BANDS` (CHIRP's
+  `chirp_common.is_split`) is shown as `split` with the TX frequency, e.g.
+  RX 145.5 / TX 435.0 MHz. Before, it was shown as `+` with a large offset.
+  Writing is unchanged; a split channel whose RX and TX lie in different
+  bands now also reads back as split (within one band it reads back as `+`
+  or `-`). The bands are the driver's, not the amateur bands: 136–174 and
+  174–400 MHz are one band each, so RX 145 / TX 222 MHz is shown as split.
+- Without CHIRP (documentation builds) `get_features`, `get_settings`,
+  `get_memory` and `set_memory` raise a `RadioError` saying CHIRP is needed, instead of an
+  `AttributeError`. All CHIRP stand-ins are documented; the pylint
+  exception for their missing docstrings is gone.
+- The GitHub Action checks the docstrings of `docs/build.py` and
+  `tools/*.py` too, and runs `tools/check_docstrings.py`. Missing
+  docstrings added in `tools/chirp_list_left.py`, `tools/find_zone_names.py`
+  and `docs/build.py`.
+
+### Fixed
+- `tools/find_zone_names.py`: the usage text printed without arguments no
+  longer shows a double backslash at the line continuation.
+
+### Removed
+- The unused `_ToneInfo` class (known issue 5) and the unreachable `split`
+  branch of `_apply_offset` (replaced by the band check above).
+
 ## 0.1.5 — 2026-10-19
 
 Bug fixes from tests on a real radio with the original CPS (V1.3.3,

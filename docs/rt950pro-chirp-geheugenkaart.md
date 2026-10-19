@@ -17,7 +17,7 @@ Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @2
 - Opgeloste latente fout: `get_logger` bestond niet (NameError bij transport zonder logger).
 - CHIRP's eigen stijlcheck (tools/cpep8.py, pep8/flake8) gebruikt 79 tekens; voor een PR nog herformatteren.
 
-## Op de echte radio bevestigd (Hans)
+## Op de echte radio bevestigd (PE1HVH)
 | Adres / cmd | Inhoud | Lezen | Schrijven |
 |---|---|---|---|
 | 0x52/0x57 0x0000–0x7BBF | 990 kanalen x 32 bytes = 10 zones x 99 (zone n kanaal k = plek (n-1)*99+k) | ok | ok |
@@ -26,7 +26,7 @@ Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @2
 | 0x54/0x58 0x0000 | APRS (128 bytes) | ok | ok met 0x58 (geschreven en teruggelezen); 0x55 geeft GEEN ACK |
 
 0xC800 (zonenamen bij de RT-920) is NIET het adres bij de RT-950 Pro.
-Op Hans' radio is 0x7800–0x7FFF volledig 0xFF (lege kanalen 961–990).
+Op de radio van PE1HVH is 0x7800–0x7FFF volledig 0xFF (lege kanalen 961–990).
 DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit "I", niet CHIRP's "R").
 
 ## Uit de CPS-changelog (RT-950PRO_CPS, primaire bron: startmelding CPS v1.3.3)
@@ -37,7 +37,7 @@ DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit 
 
 ## Uit andere bronnen
 - NeonPlug (infamy/NeonPlug PR #197, gemerged 10-10-2026): eerste melding APRS-write 0x58; ACK-wachttijd tot 30 s.
-- NeonPlug: 0x7800–0x7FFF en ≥0xE000 nooit schrijven — bij één eigenaar calibratie-achtige data (waarschijnlijk 960-kanaal-firmware). Niet door Hans geverifieerd.
+- NeonPlug: 0x7800–0x7FFF en ≥0xE000 nooit schrijven — bij één eigenaar calibratie-achtige data (waarschijnlijk 960-kanaal-firmware). Niet door PE1HVH geverifieerd.
 - Fork Dadud/Chirp_Radtel-RT-950-Pro (Kyle Brockman, dec 2025): CHANNEL_COUNT 990 maar leest nog 0x0000–0x7800 → indeling inconsistent; geen zones; APRS nog 0x55.
 - CHIRP issue #12180: open (status New), geen driver gemerged; FW 0.24 (251201) hoort bij de overgang naar 10 x 99.
 
@@ -50,7 +50,7 @@ DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit 
 2. *Opgelost in 0.1.5* (I↔R vertaald; gecontroleerd op een radio). DCS-polariteit: radio gebruikt "I", CHIRP "R". Inverted DCS van de radio geeft CHIRP-polariteit "IN"/"NI" (ongeldig); "R" uit CHIRP geeft bij encoderen `ValueError: Unsupported DCS code D023R`. Opgelost door I↔R te vertalen in `_tone_to_chirp` en `_tone_from_chirp`.
 3. *Opgelost in 0.1.5* (CHIRP-`Cross` met alle cross-modes; gecontroleerd op een radio). Tonen zonder CHIRP-"Cross": alleen-RX-toon en gemengde CTCSS/DCS gaan verloren bij bewerken van zo'n kanaal.
 4. *Opgelost in 0.1.5* (alleen gewijzigde instellingen worden toegepast). Settings-apply zet "niet ingesteld" (0xFF) om in een standaardwaarde (bv. APRS → write_aprs wordt True na alleen openen en toepassen).
-5. `_ToneInfo` is ongebruikt.
+5. *Verwijderd in 0.1.6.* `_ToneInfo` was ongebruikt.
 6. *Opgelost in 0.1.5.* VFO-vermogen werd altijd als High gelezen; een andere VFO-wijziging schreef dan High terug.
 7. *Opgelost in 0.1.5* (alleen bewerkte velden worden geschreven). `encode_modulation_sections` schreef niet-ingestelde velden (0xFF) als 0x00 bij elke upload.
 8. *Opgelost in 0.1.5* (het memory-object wordt niet meer gewijzigd). `set_memory` wijzigde CHIRP's `FrozenMemory` bij een DTCS-kanaal met TX-code 0.
@@ -64,7 +64,6 @@ DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit 
 - Voorstel in het Engels opgesteld voor issue #12180 (vragen: subklasse gewenst?, review door Fred?, testimage met neutrale kanalen ok?).
 
 ## Open
-- Ongebruikte `_ToneInfo` verwijderen (bekende fout 5).
 - Een VFO-toon met een DCS-index die de driver niet kent wordt als OFF getoond; OFF kiezen wist hem dan niet.
 - Uitzoeken wat `0x9080–0x90FF` is (zie de geheugenkaart). Sinds 0.1.5 schrijft de driver van het functiesegment alleen `0x9000–0x907F`.
 - Handshake (PROGRAMBT9000U + XOR) vergelijken met RT-920-protocol.

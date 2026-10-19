@@ -11,6 +11,38 @@
 5. Block transfers (below).
 6. Send `E` to end the session.
 
+## Handshake answers (measured)
+
+Measured on 2026-10-19 with `tools/ident_dump.py` on one RT-950 Pro with
+firmware 0.29 (shown on the radio under *About*), CPS V1.3.3.
+
+| Command | Answer (hex) | ASCII |
+|---|---|---|
+| `PROGRAMBT9000U` | `06` | |
+| `F` | `01 36 01 74 04 00 05 20 02 00 02 60 01 03 30 04` | |
+| `M` | `52 54 2D 39 35 30 20 20 20 20 20 20` | `RT-950      ` |
+| `SEND` frame | `06` | |
+
+Interpretation of the `F` answer (inference, not confirmed by Radtel or the
+CPS): the first twelve bytes read as three pairs of BCD frequencies in MHz,
+which match the bands of the radio:
+
+| Bytes | BCD | Probable meaning |
+|---|---|---|
+| 0–3 | `0136` `0174` | VHF band 136–174 MHz |
+| 4–7 | `0400` `0520` | UHF band 400–520 MHz |
+| 8–11 | `0200` `0260` | 200–260 MHz band |
+| 12–15 | `01 03 30 04` | unknown |
+
+The firmware version is in none of the answers (searched as ASCII `0.29`,
+`029` and `29`, BCD `00 29`, binary `00 1D`, `1D 00` and `1D`), and not in
+the clone image read with `0x52`/`0x54` either. The `M` answer does not say
+"Pro". With the commands above the firmware version cannot be read.
+
+Whether the `F` answer differs between firmware versions, and so could
+tell the old 960-channel firmware from the 990-channel firmware, has not
+been tested: only one radio with firmware 0.29 was measured.
+
 ## Blocks
 
 Header: `cmd, addr_hi, addr_lo, 0x80`.
