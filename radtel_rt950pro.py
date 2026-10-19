@@ -4,6 +4,8 @@
 # Copyright (c) 2026 PE1HVH                         (zones, zone names, 990
 #                                                   channels, APRS write, fixes)
 #
+# Version 0.1.4 (see CHANGELOG.md)
+#
 # Licensed under the MIT License; see the LICENSE file for the full text.
 #
 # EXPERIMENTAL. Use at your own risk: a driver bug can mis-program your radio.
@@ -88,6 +90,13 @@ try:
     import serial
 except ImportError:  # pragma: no cover - pydoc/doc builds without pyserial
     serial = None  # pylint: disable=invalid-name
+
+__version__ = "0.1.4"
+"""Driver version (semantic versioning); equal to the latest entry in
+``CHANGELOG.md`` and to the release tag ``v<version>`` on GitHub.
+
+Shown after the module name in the heading of the documentation page
+(``docs/build.py``)."""
 
 __all__ = [
     # Channel records

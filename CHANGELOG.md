@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.4 — 2026-10-19
+
+### Added
+- `__version__` in `radtel_rt950pro.py` (and a `Version` line in the header
+  comment), so a downloaded copy of the driver shows which version it is.
+  It equals the latest entry in this changelog and the release tag
+  `v<version>` on GitHub; 0.1.3 is the first tagged release (`v0.1.3`).
+- The documentation page shows the version after the module name in its
+  heading, e.g. `radtel_rt950pro (v0.1.4)`. `docs/build.py` passes the
+  driver's `__version__` to the template; without it no version is shown.
+
+### Changed
+- Template `docs/templates/module.html.jinja2`: replaces pdoc's
+  `module_name()` heading with one that adds the version.
+
 ## 0.1.3 — 2026-10-19
 
 Documentation only. The driver's code is unchanged.

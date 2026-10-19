@@ -781,6 +781,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     design = next((d for d in documents if d["id"] == DESIGN_PREFIX), None)
     pdoc.render.env.globals["layer_chapters"] = layer_chapters(design) if design else {}
     pdoc.render.env.globals["api_anchor"] = API_ANCHOR
+    # Driver version for the page heading; empty (no version shown) when the
+    # driver has no __version__.
+    pdoc.render.env.globals["version"] = getattr(module, "__version__", "")
     output = Path(args.output)
     pdoc.pdoc(MODULE, output_directory=output)
     shutil.copytree(DOCS / DIAGRAMS, output / DIAGRAMS, dirs_exist_ok=True)
