@@ -63,17 +63,26 @@ jobs:
       # pydoclint checks Args/Returns/Yields against the signatures;
       # DOC106/107 (type hints) and DOC502/503 (exceptions raised in called
       # functions) are not checked.
+      # From 0.1.6 on (when tools/check_docstrings.py exists in the checkout)
+      # the checks also cover docs/build.py and tools/*.py, and
+      # check_docstrings.py reports every module, class and function without
+      # a docstring, nested functions and the CHIRP stand-ins included.
       - name: Check docstrings (main)
         working-directory: main
         run: |
-          pydocstyle --convention=google radtel_rt950pro.py
+          FILES="radtel_rt950pro.py"
+          if [ -f tools/check_docstrings.py ]; then
+            FILES="radtel_rt950pro.py docs/build.py $(ls tools/*.py)"
+            python3 tools/check_docstrings.py $FILES
+          fi
+          pydocstyle --convention=google $FILES
           pylint --disable=all --no-docstring-rgx='^$' \
             --enable=missing-module-docstring,missing-class-docstring,missing-function-docstring \
-            radtel_rt950pro.py
+            $FILES
           pydoclint --style=google --skip-checking-short-docstrings=False \
             --arg-type-hints-in-docstring=False --check-return-types=False \
             --check-yield-types=False --check-class-attributes=False \
-            --allow-init-docstring=True radtel_rt950pro.py > doclint.txt 2>&1 || true
+            --allow-init-docstring=True $FILES > doclint.txt 2>&1 || true
           if grep -E "DOC[0-9]+:" doclint.txt | grep -vE "DOC(106|107|502|503):"; then
             echo "Docstring check failed (see above)"; exit 1
           fi
@@ -81,14 +90,19 @@ jobs:
       - name: Check docstrings (develop)
         working-directory: develop
         run: |
-          pydocstyle --convention=google radtel_rt950pro.py
+          FILES="radtel_rt950pro.py"
+          if [ -f tools/check_docstrings.py ]; then
+            FILES="radtel_rt950pro.py docs/build.py $(ls tools/*.py)"
+            python3 tools/check_docstrings.py $FILES
+          fi
+          pydocstyle --convention=google $FILES
           pylint --disable=all --no-docstring-rgx='^$' \
             --enable=missing-module-docstring,missing-class-docstring,missing-function-docstring \
-            radtel_rt950pro.py
+            $FILES
           pydoclint --style=google --skip-checking-short-docstrings=False \
             --arg-type-hints-in-docstring=False --check-return-types=False \
             --check-yield-types=False --check-class-attributes=False \
-            --allow-init-docstring=True radtel_rt950pro.py > doclint.txt 2>&1 || true
+            --allow-init-docstring=True $FILES > doclint.txt 2>&1 || true
           if grep -E "DOC[0-9]+:" doclint.txt | grep -vE "DOC(106|107|502|503):"; then
             echo "Docstring check failed (see above)"; exit 1
           fi

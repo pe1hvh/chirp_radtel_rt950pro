@@ -10,8 +10,8 @@ reference in [`memory-map.md`](memory-map.md) and
 
 | | |
 |---|---|
-| Program | `radtel_rt950pro.py` (single file, 6,653 lines) |
-| Version | 0.1.5 (2026-10-19) |
+| Program | `radtel_rt950pro.py` (single file, 6,957 lines) |
+| Version | 0.1.6 (2026-10-19) |
 | Radio | Radtel RT-950 Pro, firmware 0.24 and later (tested on 0.29) |
 | Reference CPS | RT-950PRO_CPS v1.3.3 |
 | Licence | MIT; © 2025 Nathan G. Barguss (2E0NBS), © 2026 PE1HVH |
@@ -44,7 +44,7 @@ shown as its own memory tab in CHIRP.
 | F-01 | Download the complete memory from the radio, with progress per block | ✅ | – | `sync_in` |
 | F-02 | Upload the edited memory to the radio, with progress per block | – | ✅ | `sync_out` |
 | F-03 | 990 channels shown as 10 zone tabs of 99 channels, tab titled with the zone name | ✅ | ✅ | `RT950ProZoneRadio` |
-| F-04 | Channel fields: RX/TX frequency (simplex, ±offset, split), name (12 bytes), CTCSS/DCS, power (3 levels), FM/NFM/AM, scan skip, scrambler, encryption | ✅ | ✅ | `_channel_to_memory`, `_apply_memory_to_channel` |
+| F-04 | Channel fields: RX/TX frequency (simplex, ±offset, split when RX and TX are in different bands), name (12 bytes), CTCSS/DCS, power (3 levels), FM/NFM/AM, scan skip, scrambler, encryption | ✅ | ✅ | `_channel_to_memory`, `_apply_memory_to_channel` |
 | F-05 | Zone names (10, max. 12 ASCII characters) | ✅ | ✅ | `_build_zone_group`, `encode_zone_names` |
 | F-06 | VFO A/B/C settings | ✅ | ✅ | `_build_vfo_group` |
 | F-07 | Function settings (26 shown, 57 known) | ✅ | ✅ | `_build_function_group` |
@@ -89,7 +89,7 @@ limit what is written.
 | Constraint | Consequence |
 |---|---|
 | CHIRP loads one Python file per driver | everything in `radtel_rt950pro.py`; structure by banner comments and layers |
-| Must import without CHIRP (pydoc, `docs/build.py`) | `try: from chirp import …` with stand-in classes in the `except` branch |
+| Must import without CHIRP (pydoc, `docs/build.py`) | `try: from chirp import …` with stand-in classes in the `except` branch; `HAVE_CHIRP` is then `False`; `get_features`, `get_settings`, `get_memory` and `set_memory` raise `RadioError` |
 | Must import without pyserial | `serial = None`; `CloneSerialTransport.open()` then raises `CloneTransportError` |
 | Python ≥ 3.10; CHIRP and pyserial at run time | otherwise standard library only (`dataclasses`, `enum`, `logging`, `random`, `time`, `typing`, `unicodedata`, `pathlib`); imports without CHIRP and pyserial |
 | Code quality | pylint 10/10 (100 characters), pydocstyle Google convention, pydoclint; CHIRP itself uses 79 characters (reformat before a CHIRP PR) |
@@ -316,7 +316,6 @@ clone.
 | `RT950ProRadio` | `chirp_common.CloneModeRadio` | all behaviour; memories 1–990 |
 | `RT950ProDriver` | `RT950ProRadio` | the registered class (`@directory.register`); empty |
 | `RT950ProZoneRadio` | `RT950ProRadio` | one zone as a sub-device; maps 1–99 to the parent; no own data, does not call CHIRP's constructor |
-| `_ToneInfo` | dataclass | unused (known issue 5) |
 
 #### B9.2 State of `RT950ProRadio`
 
@@ -504,10 +503,48 @@ smaller fixes of 0.1.5 (GB2312 cut, DTMF index, function segment):
 | `test_negative_dtmf_code_group_index_is_refused` | DTMF code group index below 0 refused |
 | `test_function_segment_write_stops_before_0x9080` | function segment written as one block (S-04) |
 
+`tests/test_ident_dump.py` checks `tools/ident_dump.py` against a simulated
+radio with invented answers:
+
+| Test | Checks |
+|---|---|
+| `test_identify_records_all_answers_and_ends_session` | all four answers recorded; only the handshake string, `F`, `M`, the `SEND` frame and `E` are sent (5 writes); port closed |
+| `test_find_version_reports_answer_and_offset` | an ASCII version is found with answer number and offset |
+| `test_find_version_bcd_and_binary` | BCD and binary forms are found |
+| `test_version_patterns_rejects_bad_input` | a version that is not `<major>.<minor>` is refused |
+| `test_main_prints_answers` | hex/ASCII output and search result on the command line |
+| `test_empty_expect_is_refused` | an empty `--expect` stops with exit code 2 |
+| `test_version_patterns_rejects_non_ascii_digits` | non-ASCII digits are refused |
+
+`tests/test_cleanup.py` covers the clean-up of 0.1.6:
+
+| Test | Checks |
+|---|---|
+| `test_duplex_follows_the_bands` | simplex, `-` 600 kHz, `+` 7.6 MHz within one band; RX 145.5 / TX 435.0 MHz is `split` |
+| `test_split_channel_round_trips` | a split channel entered in CHIRP (RX and TX in different bands) is written with TX = offset and read back as split |
+| `test_unused_tone_info_class_is_gone` | `_ToneInfo` removed |
+| `test_without_chirp_the_driver_says_chirp_is_required` | with CHIRP blocked (subprocess) `HAVE_CHIRP` is `False` and `get_features`, `get_settings`, `get_memory`, `set_memory` raise `RadioError` naming CHIRP |
+| `test_with_chirp_the_flag_is_set` | `HAVE_CHIRP` is `True` with CHIRP |
+| `test_find_zone_names_usage_has_a_single_backslash` | the usage text of `find_zone_names.py` continues the shell line |
+
+`tests/test_check_docstrings.py` checks `tools/check_docstrings.py` and the
+repository itself:
+
+| Test | Checks |
+|---|---|
+| `test_reports_public_private_nested_and_stand_in_objects` | public, private, nested and `except`-block functions without a docstring are reported |
+| `test_reports_missing_module_docstring` | a module without a docstring is reported |
+| `test_main_exit_status` | exit status 1 with a report line, 0 when complete |
+| `test_repository_is_fully_documented` | the driver, `tools/*.py` and `docs/build.py` pass |
+| `test_unreadable_file_is_reported_not_raised` | a file that is not UTF-8 is reported, not a traceback |
+
 Tools: `tools/make_sample_image.py` (sample `.img`),
 `tools/find_zone_names.py` (read-only scan of unread address ranges; found
 `0xC000`), `tools/raw_dump.py` (read-only dump of the clone image,
-XOR-decoded, without the driver's encoders), `tools/chirp_list_left.py`
+XOR-decoded, without the driver's encoders), `tools/ident_dump.py`
+(read-only: every byte of the handshake answers, with a search for the
+firmware version), `tools/check_docstrings.py` (every object has a
+docstring), `tools/chirp_list_left.py`
 (optional CHIRP patch).
 
 ### B13. Documentation build
@@ -531,10 +568,16 @@ XOR-decoded, without the driver's encoders), `tools/chirp_list_left.py`
 The GitHub Action `.github/workflows/docs.yml` checks the driver's
 docstrings with pydocstyle, pylint and pydoclint, then builds `main` into the
 site root and `develop` into `/develop/` and publishes both to GitHub Pages on
-every push to either branch. pydocstyle only checks the names in `__all__`;
-pylint's missing-docstring checks (with no exemption for names starting with
-`_`) cover every other module-level class, function and method. Nested
-functions are checked by neither.
+every push to either branch. The checks cover the driver, `docs/build.py`
+and `tools/*.py`. pydocstyle only checks public names (in a module with
+`__all__`: the names in it); pylint's
+missing-docstring checks (with no exemption for names starting with `_`)
+cover every other module-level class, function and method; neither looks
+at nested functions. `tools/check_docstrings.py` closes that gap: it walks
+the syntax tree and reports every module, class and function without a
+docstring, nested functions and the CHIRP stand-ins in the `except` branch
+included. The Action runs it only in a checkout that contains it (0.1.6 and
+later), so an older `main` still builds.
 
 **Diagrams.** The SVG files in `docs/diagrams` are generated, not drawn by
 hand:
@@ -558,10 +601,10 @@ first argument. Only the standard library is needed.
 ### B14. Known issues and observations
 
 Known issues are listed in [`status.md`](status.md); they are not repeated
-here. Still open:
-unused `_ToneInfo` (5), and a VFO tone with a DCS index the driver does not
-know, which is shown as OFF (choosing OFF then does not clear it). All other
-known issues (1–4 and 6–10) are fixed in 0.1.5, each with a test.
+here. Still open: a VFO tone with a DCS index the driver does not know,
+which is shown as OFF (choosing OFF then does not clear it). Known issues
+1–4 and 6–10 are fixed in 0.1.5, each with a test; the unused `_ToneInfo`
+(5) is removed in 0.1.6.
 
 Additional observations from the interface analysis (snapshots not refreshed
 after an upload, comments lost after a zone rename, progress text past
@@ -572,7 +615,6 @@ channel 990, repeated payload builds) are in
 
 From [`status.md`](status.md):
 
-* remove the unused `_ToneInfo` (known issue 5);
 * a VFO tone with a DCS index the driver does not know is shown as OFF;
 * find out what `0x9080–0x90FF` is;
 * detect the firmware layout (960 vs 990 channels) before writing;
