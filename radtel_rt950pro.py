@@ -4,7 +4,7 @@
 # Copyright (c) 2026 PE1HVH                         (zones, zone names, 990
 #                                                   channels, APRS write, fixes)
 #
-# Version 0.1.4 (see CHANGELOG.md)
+# Version 0.1.5 (see CHANGELOG.md)
 #
 # Licensed under the MIT License; see the LICENSE file for the full text.
 #
@@ -48,14 +48,13 @@ The module is organised in layers, from raw bytes up to CHIRP:
 6. CHIRP integration: :class:`RT950ProRadio` and one
    :class:`RT950ProZoneRadio` sub-device per zone.
 
-Unedited channel records and VFO entries are written back byte-identical.
-Settings encoders work read-modify-write on the stored bytes and replace
-only the bits of known fields, but a field byte holding 0xFF is treated
-as 0 before its fields are merged, and some encoders normalise or rewrite
-bytes even without an edit (see the Warning sections of
-:func:`encode_modulation_sections` and :func:`encode_aprs_section`). An
-edited channel record is rebuilt from scratch (see
-:meth:`ChannelRecord.to_bytes`).
+Unedited channel records, VFO entries and settings blocks are written back
+byte-identical. Settings encoders work read-modify-write on the stored
+bytes and only rewrite a field whose value was edited; a field byte holding
+0xFF is treated as 0 before an edited field is merged into it. Settings
+applied in CHIRP only touch the settings that were changed. An edited
+channel record is rebuilt from its fields, keeping the unknown high nibbles
+of bytes 12-13 (see :meth:`ChannelRecord.to_bytes`).
 
 See ``docs/memory-map.md`` and ``docs/protocol.md`` in the repository for
 the byte-level reference.
@@ -91,7 +90,7 @@ try:
 except ImportError:  # pragma: no cover - pydoc/doc builds without pyserial
     serial = None  # pylint: disable=invalid-name
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 """Driver version (semantic versioning); equal to the latest entry in
 ``CHANGELOG.md`` and to the release tag ``v<version>`` on GitHub.
 
@@ -641,8 +640,8 @@ class ChannelRecord:
         4-7    TX frequency, same format
         8-9    RX tone (see ToneSetting)
         10-11  TX tone
-        12     signalling group (low nibble)
-        13     PTT ID (low nibble)
+        12     signalling group (low nibble); high nibble unknown, kept
+        13     PTT ID (low nibble); high nibble unknown, kept
         14     scrambler (high nibble) | power (low nibble)
         15     flags: b7 learn FHSS, b6 narrow, b5-4 encryption,
                b3 busy lockout, b2 scan add, b1 TX enabled, b0 AM
@@ -763,10 +762,10 @@ class ChannelRecord:
 
         An unchanged record returns its original bytes. A changed record is
         rebuilt from scratch; the new bytes then become the reference for the
-        next change check. Rebuilding keeps only the known fields: bytes 12
-        and 13 keep only their low nibble (high nibble 0), the FHSS field
-        becomes 0xFF x 4 when no code is set, and the name is padded with
-        0xFF.
+        next change check. Rebuilding writes the known fields; the high
+        nibbles of bytes 12 and 13 (meaning unknown) are taken from the
+        original bytes (0 if that byte was 0xFF), the FHSS field becomes
+        0xFF x 4 when no code is set, and the name is padded with 0xFF.
 
         Args:
             logger: Logger for name-encoding warnings; defaults to ``LOG``.
@@ -789,8 +788,13 @@ class ChannelRecord:
         buf[4:8] = _encode_frequency(self.tx_hz)
         buf[8:10] = self.rx_tone.to_bytes()
         buf[10:12] = self.tx_tone.to_bytes()
-        buf[12] = self.signalling_group & 0x0F
-        buf[13] = self.ptt_id & 0x0F
+        # Keep the high nibbles of bytes 12-13 (meaning unknown) from the
+        # bytes this record was decoded from; 0xFF counts as 0.
+        old = self._raw_bytes if len(self._raw_bytes) == 32 else b""
+        high12 = old[12] & 0xF0 if old and old[12] != 0xFF else 0
+        high13 = old[13] & 0xF0 if old and old[13] != 0xFF else 0
+        buf[12] = high12 | (self.signalling_group & 0x0F)
+        buf[13] = high13 | (self.ptt_id & 0x0F)
         scram = self.scrambler & 0x0F
         power_value = self.power.value & 0x0F
         buf[14] = (scram << 4) | power_value
@@ -1080,20 +1084,18 @@ class VFOSettings:
     busy_lockout: bool
     """Busy-channel lockout."""
     offset_direction: int
-    """0 simplex, 1 plus, 2 minus, 3 split."""
+    """0 none, 1 plus, 2 minus (CPS *Offset Dir*). 3 (split) is not offered
+    by the CPS or in CHIRP; a stored 3 is kept."""
     signalling_group: int
-    """DTMF signalling group, 0-15."""
+    """DTMF signalling group as stored, 0-14; the CPS shows it plus one
+    (1-15)."""
     tx_power: PowerLevel
-    """Transmit power.
-
-    Warning:
-        Known issue: currently always decoded as HIGH (see
-        :func:`parse_vfo_section`).
-    """
+    """Transmit power: stored 0 High, 1 Middle (``MEDIUM``), 2 Low."""
     scrambler: int
-    """Scrambler code, 0-15."""
+    """Scrambler code, 0 (off) to 8; the nibble can hold up to 15."""
     learn_fhss: bool
-    """Learn-FHSS flag."""
+    """Learn-FHSS flag; not shown in the CPS *VFO Mode* screen or in CHIRP,
+    kept as stored."""
     bandwidth: Bandwidth
     """FM bandwidth."""
     encryption: int
@@ -1101,9 +1103,9 @@ class VFOSettings:
     rx_modulation: Modulation
     """Receive modulation."""
     freq_band: int
-    """Band index (see ``_VFO_BAND_CHOICES``)."""
+    """Frequency band, 0 VHF or 1 UHF (see ``_VFO_BAND_CHOICES``)."""
     step_freq_index: int
-    """Step index (see ``_VFO_STEP_CHOICES``)."""
+    """Step index 0-9, 2.5 kHz to 100 kHz (see ``_VFO_STEP_CHOICES``)."""
     _raw_bytes: bytes = field(default=b"", repr=False, compare=False)
     """The 32-byte VFO entry this object was decoded from (empty when new).
     Written back unchanged by :func:`encode_vfo_section` while the entry
@@ -1244,11 +1246,10 @@ def parse_vfo_section(section: bytes) -> List[VFOSettings]:
     Raises:
         ValueError: If the length is not a multiple of 32.
 
-    Warning:
-        Known issue: the power nibble (byte 16) is decoded with
-        ``min(raw, PowerLevel.HIGH.value)``, which is always 0, so every
-        entry decodes as HIGH. Editing any other field of a VFO then writes
-        HIGH (0) back to byte 16, changing Medium/Low power to High.
+    Note:
+        The power nibble (byte 16) holds 0 High, 1 Middle, 2 Low; a higher
+        value is decoded as Low, as for channels, and written back as 2 only
+        if that VFO entry is re-encoded because another field changed.
     """
     if len(section) % 32 != 0:
         raise ValueError("VFO section must be a multiple of 32 bytes")
@@ -1262,7 +1263,7 @@ def parse_vfo_section(section: bytes) -> List[VFOSettings]:
         offset_dir = (chunk[14] >> 4) & 0x03
         signalling_group = chunk[14] & 0x0F
         tx_power_raw = chunk[16] & 0x0F
-        tx_power = PowerLevel(min(tx_power_raw, PowerLevel.HIGH.value))
+        tx_power = PowerLevel(min(tx_power_raw, PowerLevel.LOW.value))
         scrambler = (chunk[16] >> 4) & 0x0F
         learn_fhss = bool((chunk[17] >> 7) & 0x01)
         # Radio uses bit6: 1 = NARROW, 0 = WIDE
@@ -1922,19 +1923,14 @@ def encode_modulation_sections(
 ) -> tuple[bytes, bytes]:
     """Encode modulation settings into the parameter and name blocks.
 
-    Frequency, bandwidth and beat-offset fields of entries
-    0..len(channels)-1 are rewritten when their encoded bytes differ; names
-    are rewritten only when their decoded text changed. Entries beyond
+    Every field is only rewritten when its value differs from what
+    :func:`parse_modulation_sections` decodes from the original blocks, so
+    unedited blocks, including unset (0xFF) fields, are written back
+    byte-identical. A rewritten frequency of ``None`` is stored as 0x0000,
+    a bandwidth or beat offset of ``None`` as 0. Entries beyond
     ``len(settings.channels)`` (up to 16) are cleared to 0xFF. Parameter
-    bytes 32, 33, 66-68 and 149-152 are written via ``_write_param``
-    (``None`` skips; 0 does not overwrite 0xFF).
-
-    Warning:
-        Known issue: parsing turns both 0 and 0xFFFF frequencies, and 0/0xFF
-        bandwidths, into ``None``; encoding writes ``None`` as 0x00. Unset
-        (0xFF) fields therefore become 0x00 even when nothing was edited: an
-        all-0xFF parameter block comes back with 144 bytes changed. The
-        parameter block is part of every upload.
+    bytes 32, 33, 66-68 and 149-152 are written when their value differs
+    (``None`` never overwrites).
 
     Args:
         settings: Settings to write; ``None`` leaves both blocks as is.
@@ -1954,6 +1950,7 @@ def encode_modulation_sections(
     if settings is None:
         return bytes(params), bytes(names)
 
+    stored = parse_modulation_sections(bytes(params), bytes(names))
     channels = settings.channels[:16]
 
     def _encode_freq(value: Optional[int]) -> bytes:
@@ -1972,46 +1969,30 @@ def encode_modulation_sections(
         return _encode_le_uint16(scaled)
 
     for idx, channel in enumerate(channels):
-        start = idx * 2
-        fm_bytes = _encode_freq(channel.fm_frequency)
-        if params[start : start + 2] != fm_bytes:
-            params[start : start + 2] = fm_bytes
-
-        am_start = 34 + idx * 2
-        am_bytes = _encode_freq(channel.am_frequency)
-        if params[am_start : am_start + 2] != am_bytes:
-            params[am_start : am_start + 2] = am_bytes
-
+        old = stored.channels[idx]
+        if channel.fm_frequency != old.fm_frequency:
+            params[idx * 2 : idx * 2 + 2] = _encode_freq(channel.fm_frequency)
+        if channel.am_frequency != old.am_frequency:
+            params[34 + idx * 2 : 36 + idx * 2] = _encode_freq(channel.am_frequency)
         base = 69 + idx * 5
-        ssb_bytes = _encode_freq(channel.ssb_frequency)
-        if params[base : base + 2] != ssb_bytes:
-            params[base : base + 2] = ssb_bytes
-        bandwidth = 0 if channel.ssb_bandwidth is None else channel.ssb_bandwidth & 0xFF
-        if params[base + 2] != bandwidth:
-            params[base + 2] = bandwidth
-        beat_value = (
-            0
-            if channel.ssb_beat_offset is None
-            else max(-32768, min(32767, int(channel.ssb_beat_offset)))
-        )
-        beat_bytes = _encode_le_int16(beat_value)
-        if params[base + 3 : base + 5] != beat_bytes:
-            params[base + 3 : base + 5] = beat_bytes
+        if channel.ssb_frequency != old.ssb_frequency:
+            params[base : base + 2] = _encode_freq(channel.ssb_frequency)
+        if channel.ssb_bandwidth != old.ssb_bandwidth:
+            params[base + 2] = 0 if channel.ssb_bandwidth is None else channel.ssb_bandwidth & 0xFF
+        if channel.ssb_beat_offset != old.ssb_beat_offset:
+            beat_value = (
+                0
+                if channel.ssb_beat_offset is None
+                else max(-32768, min(32767, int(channel.ssb_beat_offset)))
+            )
+            params[base + 3 : base + 5] = _encode_le_int16(beat_value)
 
-        fm_name_offset = idx * 16
-        fm_existing = _decode_gb2312(names, fm_name_offset, max_len=16)
-        if fm_existing.rstrip('\x00') != channel.fm_name.rstrip('\x00'):
-            names[fm_name_offset : fm_name_offset + 16] = _encode_gb2312(channel.fm_name, 16)
-
-        am_name_offset = 256 + idx * 16
-        am_existing = _decode_gb2312(names, am_name_offset, max_len=16)
-        if am_existing.rstrip('\x00') != channel.am_name.rstrip('\x00'):
-            names[am_name_offset : am_name_offset + 16] = _encode_gb2312(channel.am_name, 16)
-
-        ssb_name_offset = 512 + idx * 16
-        ssb_existing = _decode_gb2312(names, ssb_name_offset, max_len=16)
-        if ssb_existing.rstrip('\x00') != channel.ssb_name.rstrip('\x00'):
-            names[ssb_name_offset : ssb_name_offset + 16] = _encode_gb2312(channel.ssb_name, 16)
+        for table, new_name, old_name in ((0, channel.fm_name, old.fm_name),
+                                          (256, channel.am_name, old.am_name),
+                                          (512, channel.ssb_name, old.ssb_name)):
+            if new_name.rstrip('\x00') != old_name.rstrip('\x00'):
+                offset = table + idx * 16
+                names[offset : offset + 16] = _encode_gb2312(new_name, 16)
 
     for idx in range(len(channels), 16):
         params[idx * 2 : idx * 2 + 2] = b"\xFF\xFF"
@@ -2022,47 +2003,26 @@ def encode_modulation_sections(
         names[256 + idx * 16 : 256 + idx * 16 + 16] = b"\xFF" * 16
         names[512 + idx * 16 : 512 + idx * 16 + 16] = b"\xFF" * 16
 
-    def _write_param(index: int, value: Optional[int]) -> None:
-        """Write a single parameter byte unless the value is ``None``.
-
-        A value of 0 does not overwrite an unset (0xFF) byte.
-
-        Args:
-            index: Byte offset within the 256-byte modulation parameter block.
-            value: Value to store (masked to 8 bits), or ``None`` to skip.
-        """
-        if value is None:
-            return
-        encoded_value = value & 0xFF
-        if params[index] == 0xFF and encoded_value == 0:
-            return
-        params[index] = encoded_value
-
-    _write_param(32, settings.fm_current_channel)
-    _write_param(33, settings.work_mode)
-    _write_param(66, settings.am_current_channel)
-    _write_param(67, settings.modulation_mode)
-    _write_param(68, settings.am_rx_gain)
-    _write_param(149, settings.ssb_current_channel)
-    _write_param(150, settings.ssb_step_index)
-    _write_param(151, settings.am_step_index)
-    _write_param(152, settings.ssb_rx_gain)
+    for index, attr in ((32, 'fm_current_channel'), (33, 'work_mode'),
+                        (66, 'am_current_channel'), (67, 'modulation_mode'),
+                        (68, 'am_rx_gain'), (149, 'ssb_current_channel'),
+                        (150, 'ssb_step_index'), (151, 'am_step_index'),
+                        (152, 'ssb_rx_gain')):
+        value = getattr(settings, attr)
+        if value is not None and value != getattr(stored, attr):
+            params[index] = value & 0xFF
 
     return bytes(params), bytes(names)
 
 def encode_aprs_section(settings: Optional[APRSSettings], raw: Optional[bytes]) -> bytes:
     """Encode APRS settings into the 128-byte APRS block.
 
-    Masked fields and text fields are only changed when their value
-    differs. A block holding valid values is written back byte-identical.
-    A key missing from ``settings.fields`` writes 0xFF.
-
-    Warning:
-        Out-of-range stored values are normalised even without an edit:
-        N/S and W/E bytes other than ``N``/``W`` become ``S``/``E``,
-        minutes/seconds/degrees are clamped, and bit 7 of byte 27 is
-        cleared. The APRS block is only uploaded when its bytes differ from
-        the ones read (see ``RT950ProRadio._write_options``).
+    Every field is only changed when its value differs from what
+    :func:`parse_aprs_section` decodes from ``raw``, so an unedited block is
+    written back byte-identical, including stored values outside the normal
+    ranges (an N/S or W/E byte other than the letters, minutes above 59, bit
+    7 of byte 27). A changed field is written normalised. A key missing from
+    ``settings.fields`` writes 0xFF.
 
     Args:
         settings: Settings to write; ``None`` leaves ``raw`` as is.
@@ -2079,6 +2039,18 @@ def encode_aprs_section(settings: Optional[APRSSettings], raw: Optional[bytes]) 
         return bytes(data)
 
     fields = settings.fields
+    stored = parse_aprs_section(bytes(data)).fields
+
+    def _edited(key: str) -> bool:
+        """Return whether ``fields[key]`` differs from the value decoded from ``raw``.
+
+        Args:
+            key: Field key in ``settings.fields``.
+
+        Returns:
+            bool: ``True`` if the field must be written.
+        """
+        return fields.get(key) != stored.get(key)
 
     def _set(idx: int, key: str, mask: int = 0x0F) -> None:
         """Write ``fields[key]`` at ``idx`` under ``mask``; ``None`` writes 0xFF.
@@ -2108,32 +2080,25 @@ def encode_aprs_section(settings: Optional[APRSSettings], raw: Optional[bytes]) 
     _set(5, "altitude_unit")
     _set(6, "time_zone", mask=0x1F)
 
-    north = fields.get("north_south")
-    if north is None:
-        data[7] = 0xFF
-    else:
-        data[7] = 0x4E if int(north) == 0 else 0x53
+    if _edited("north_south"):
+        north = fields.get("north_south")
+        data[7] = 0xFF if north is None else (0x4E if int(north) == 0 else 0x53)
+    for idx, key, limit in ((8, "latitude_minute", 59), (9, "latitude_degree", 90),
+                            (10, "latitude_second", 59), (12, "longitude_minute", 59),
+                            (13, "longitude_degree", 180), (14, "longitude_second", 59)):
+        if _edited(key):
+            data[idx] = _encode_optional_bounded(fields.get(key), limit)
+    if _edited("east_west"):
+        east = fields.get("east_west")
+        data[11] = 0xFF if east is None else (0x57 if int(east) == 0 else 0x45)
 
-    data[8] = _encode_optional_bounded(fields.get("latitude_minute"), 59)
-    data[9] = _encode_optional_bounded(fields.get("latitude_degree"), 90)
-    data[10] = _encode_optional_bounded(fields.get("latitude_second"), 59)
-
-    east = fields.get("east_west")
-    if east is None:
-        data[11] = 0xFF
-    else:
-        data[11] = 0x57 if int(east) == 0 else 0x45
-
-    data[12] = _encode_optional_bounded(fields.get("longitude_minute"), 59)
-    data[13] = _encode_optional_bounded(fields.get("longitude_degree"), 180)
-    data[14] = _encode_optional_bounded(fields.get("longitude_second"), 59)
-
-    altitude = fields.get("altitude")
-    if altitude is None:
-        data[15:17] = b"\xFF\xFF"
-    else:
-        alt = max(-10000, min(10000, int(altitude)))
-        data[15:17] = alt.to_bytes(2, "little", signed=True)
+    if _edited("altitude"):
+        altitude = fields.get("altitude")
+        if altitude is None:
+            data[15:17] = b"\xFF\xFF"
+        else:
+            alt = max(-10000, min(10000, int(altitude)))
+            data[15:17] = alt.to_bytes(2, "little", signed=True)
 
     call_sign_value = fields.get("call_sign")
     raw_call_sign_bytes = data[17:23]
@@ -2147,11 +2112,9 @@ def encode_aprs_section(settings: Optional[APRSSettings], raw: Optional[bytes]) 
     _set(24, "routing_select")
     _set(25, "my_position")
     _set(26, "radio_symbol")
-    icon = fields.get("user_defined_icon")
-    if icon is None:
-        data[27] = 0xFF
-    else:
-        data[27] = int(icon) & 0x7F
+    if _edited("user_defined_icon"):
+        icon = fields.get("user_defined_icon")
+        data[27] = 0xFF if icon is None else int(icon) & 0x7F
     _set(29, "aprs_priority")
     _set(30, "data_tx_delay")
     _set(32, "aprs_decode_prompt_tone")
@@ -2419,8 +2382,8 @@ def _encode_le_int16(value: int) -> bytes:
 def _encode_gb2312(text: Optional[str], max_len: int) -> bytes:
     """Encode text as GB2312 into a fixed-length field.
 
-    Text longer than ``max_len`` bytes is cut at the byte limit, which can
-    leave half of a two-byte character.
+    Text longer than ``max_len`` bytes is cut before the first character
+    that does not fit completely, so a two-byte character is never halved.
 
     Args:
         text: Text to encode; unencodable characters are dropped.
@@ -2431,8 +2394,13 @@ def _encode_gb2312(text: Optional[str], max_len: int) -> bytes:
     """
     if not text:
         return b"\xFF" * max_len
-    encoded = text.encode("gb2312", errors="ignore")[:max_len]
-    return encoded + b"\xFF" * (max_len - len(encoded))
+    encoded = bytearray()
+    for char in text:
+        char_bytes = char.encode("gb2312", errors="ignore")
+        if len(encoded) + len(char_bytes) > max_len:
+            break
+        encoded += char_bytes
+    return bytes(encoded) + b"\xFF" * (max_len - len(encoded))
 
 def _encode_ascii(text: Optional[str], length: int) -> bytes:
     """Encode text as ASCII into a fixed-length field.
@@ -2529,10 +2497,10 @@ _FUNCTION_SPECS: Dict[str, SettingSpec] = {
     "divide_channel": SettingSpec("bool"),
     "subaudio_scan_save": SettingSpec("bool"),
     "vox_switch": SettingSpec("bool"),
-    "key_side1_short": SettingSpec("enum", choices=tuple(range(0, 32))),
-    "key_side1_long": SettingSpec("enum", choices=tuple(range(0, 32))),
-    "key_side2_short": SettingSpec("enum", choices=tuple(range(0, 32))),
-    "key_side2_long": SettingSpec("enum", choices=tuple(range(0, 32))),
+    "key_side1_short": SettingSpec("enum", choices=tuple(range(0, 8))),
+    "key_side1_long": SettingSpec("enum", choices=tuple(range(0, 8))),
+    "key_side2_short": SettingSpec("enum", choices=tuple(range(0, 7))),
+    "key_side2_long": SettingSpec("enum", choices=tuple(range(0, 7))),
     "current_work_area_a": SettingSpec("enum", choices=tuple(range(0, 16))),
     "current_work_area_b": SettingSpec("enum", choices=tuple(range(0, 16))),
     "current_work_area_c": SettingSpec("enum", choices=tuple(range(0, 16))),
@@ -2552,10 +2520,9 @@ _FUNCTION_SPECS: Dict[str, SettingSpec] = {
 """Validation rule per function setting, keyed by the names in
 :class:`FunctionSettings`.
 
-Warning:
-    Known issue: ``key_side1/2_short/long`` accept 0-31 here but are stored
-    with mask 0x0F, so values above 15 are written without bit 4 (20 reads
-    back as 4).
+``key_side1_short/long`` are PF1 Short/Long in the CPS (8 functions: Radio,
+Moni, Scan, Search, SOS, Spectrum, BeaconTx, PTTC = 0-7); ``key_side2_*``
+are PF2 (the same without PTTC, 0-6). Confirmed on a radio.
 """
 
 def function_keys() -> Iterable[str]:
@@ -2686,14 +2653,14 @@ _APRS_SPECS: Dict[str, SettingSpec] = {
     "ssid": SettingSpec("enum", choices=tuple(range(0, 16))),
     "routing_select": SettingSpec("enum", choices=tuple(range(0, 6))),
     "my_position": SettingSpec("enum", choices=tuple(range(0, 6))),
-    "radio_symbol": SettingSpec("enum", choices=tuple(range(0, 100))),
+    "radio_symbol": SettingSpec("enum", choices=tuple(range(0, 5))),
     "user_defined_icon": SettingSpec("enum", choices=tuple(range(0, 128))),
     "aprs_priority": SettingSpec("enum", choices=tuple(range(0, 3))),
     "data_tx_delay": SettingSpec("int", 0, 9),
     "aprs_decode_prompt_tone": SettingSpec("bool"),
     "aprs_rx_auto_popup": SettingSpec("bool"),
     "beacon_tx_type": SettingSpec("enum", choices=tuple(range(0, 3))),
-    "timed_beacon_time": SettingSpec("int", 0, 60),
+    "timed_beacon_time": SettingSpec("enum", choices=tuple(range(0, 10))),
     "mice_type": SettingSpec("enum", choices=tuple(range(0, 4))),
     "tnc_data_type": SettingSpec("enum", choices=tuple(range(0, 4))),
     "aprs_forward_channel": SettingSpec("enum", choices=tuple(range(0, 16))),
@@ -2709,10 +2676,11 @@ _APRS_SPECS: Dict[str, SettingSpec] = {
 """Validation rule per APRS setting, keyed by the names in
 :class:`APRSSettings`.
 
-Warning:
-    Known issue: ``timed_beacon_time`` (0-60) and ``radio_symbol`` (0-99) are
-    stored with mask 0x0F, so values above 15 are truncated (30 reads back as
-    14, 50 as 2).
+``timed_beacon_time`` is the index of CPS *Timed Beacon Time* (30 sec, 1, 2,
+3, 5, 10, 15, 20, 30, 60 min = 0-9; 30 sec = 0 confirmed on a radio, the
+rest follows the CPS list order). ``radio_symbol`` is the index of CPS
+*Radio Symbol* (Pedestrians, Bicycles, Cars, RecreationalVehicles,
+UserDefined = 0-4; 0 and 4 confirmed on a radio).
 """
 
 def aprs_keys() -> Iterable[str]:
@@ -2870,10 +2838,11 @@ def get_dtmf_code_group(settings: DTMFSettings, index: int) -> str:
         str: The code group as DTMF symbols (up to 6).
 
     Raises:
-        IndexError: If ``index`` >= the number of code groups or
-            < -len (a negative index counts from the end, unlike
-            :func:`set_dtmf_code_group`).
+        IndexError: If ``index`` is negative or not below the number of
+            code groups.
     """
+    if not 0 <= index < len(settings.code_groups):
+        raise IndexError(index)
     return settings.code_groups[index]
 
 def set_dtmf_code_group(settings: DTMFSettings, index: int, value: str) -> None:
@@ -2957,8 +2926,9 @@ ZONE_NAME_STRIDE = 16
 """Distance in bytes between consecutive zone-name slots."""
 ZONE_NAME_READ_LENGTH = 16
 """Decode up to the full 16-byte slot, stopping at 0x00/0xFF padding."""
-ZONE_NAME_LENGTH = 10
-"""Maximum length when writing a name (conservative, as RT-920 / CPS)."""
+ZONE_NAME_LENGTH = 12
+"""Maximum length of a zone name: the CPS (*Cur Zone Name*) cuts a name to
+12 characters, confirmed on a radio. The 16-byte slot is padded after it."""
 
 KNOWN_SEGMENT_BYTES = (
     VFO_SEGMENT_BYTES
@@ -3928,7 +3898,7 @@ except ImportError:  # pragma: no cover - fallback for local development
             self.memory_bounds = (0, 0)
             self.valid_bands = []
             self.valid_duplexes = ["", "+", "-", "split"]
-            self.valid_tmodes = ["", "Tone", "TSQL", "DTCS"]
+            self.valid_tmodes = ["", "Tone", "TSQL", "DTCS", "Cross"]
             self.valid_modes = ["FM", "NFM", "AM"]
             self.valid_power_levels = ["Low", "Medium", "High"]
             self.valid_skips = ["", "S"]
@@ -3990,9 +3960,26 @@ except ImportError:  # pragma: no cover - fallback for local development
 
         def __init__(self, value=None):
             self._value = value
+            self._mutable = True
 
         def initialize(self):
             pass
+
+        def set_mutable(self, mutable):
+            """Mark the value as editable or read-only, as CHIRP does.
+
+            Args:
+                mutable: ``False`` for a read-only value.
+            """
+            self._mutable = mutable
+
+        def get_mutable(self):
+            """Return whether the value is editable.
+
+            Returns:
+                bool: ``False`` after ``set_mutable(False)``.
+            """
+            return self._mutable
 
         def set_value(self, value):
             self._value = value
@@ -4376,40 +4363,76 @@ _DTMF_MODE_CHOICES = [('Off', 0), ('BOT', 1), ('EOT', 2), ('Both', 3)]
 """PTT ID mode labels and stored values."""
 
 _VFO_LABELS = ['A', 'B', 'C']
-"""Display names of the three VFOs."""
-_VFO_OFFSET_CHOICES = [('Simplex', 0), ('Plus (+)', 1), ('Minus (-)', 2), ('Split', 3)]
-"""VFO offset direction labels and stored values."""
-_VFO_BANDWIDTH_CHOICES = [('Narrow', Bandwidth.NARROW), ('Wide', Bandwidth.WIDE)]
-"""VFO bandwidth labels and :class:`Bandwidth` values."""
+"""Letters of the three VFOs; the groups are named ``VFO-A`` to ``VFO-C`` as in the CPS."""
+_VFO_OFFSET_CHOICES = [('None', 0), ('Plus', 1), ('Minus', 2)]
+"""Offset Dir labels of the CPS and the stored values (byte 14, bits 5-4).
+Stored value 3 is not offered and is shown as unknown."""
+_VFO_BANDWIDTH_CHOICES = [('Wide', Bandwidth.WIDE), ('Narrow', Bandwidth.NARROW)]
+"""Bandwidth labels of the CPS and :class:`Bandwidth` values."""
 _VFO_MODULATION_CHOICES = [('FM', Modulation.FM), ('AM', Modulation.AM)]
-"""VFO receive modulation labels and :class:`Modulation` values."""
+"""RxModulation labels of the CPS and :class:`Modulation` values."""
 _VFO_POWER_CHOICES = [
-    ('Low', PowerLevel.LOW),
-    ('Medium', PowerLevel.MEDIUM),
     ('High', PowerLevel.HIGH),
+    ('Middle', PowerLevel.MEDIUM),
+    ('Low', PowerLevel.LOW),
 ]
-"""VFO power labels and :class:`PowerLevel` values."""
-_VFO_ENCRYPTION_CHOICES = [('Off', 0), ('Type 1', 1), ('Type 2', 2), ('Type 3', 3)]
-"""VFO encryption labels and stored values."""
-_VFO_BAND_CHOICES = [
-    ('50-76 MHz', 0),
-    ('108-136 MHz', 1),
-    ('137-174 MHz', 2),
-    ('174-350 MHz', 3),
-    ('350-400 MHz', 4),
-    ('400-470 MHz', 5),
-    ('470-600 MHz', 6),
-]
-"""VFO frequency band labels and stored band indexes."""
+"""Tx Power labels of the CPS and :class:`PowerLevel` values (stored 0, 1, 2)."""
+_VFO_ENCRYPTION_CHOICES = [('OFF', 0), ('Encryption 1', 1), ('Encryption 2', 2),
+                           ('Encryption 3', 3)]
+"""Encryption labels of the CPS and the stored values (byte 17, bits 5-4)."""
+_VFO_BAND_CHOICES = [('VHF', 0), ('UHF', 1)]
+"""Freq Band labels of the CPS and the stored values (byte 18, low nibble).
+
+Confirmed on a radio: 439.4 MHz stores 1 (UHF), 145.025 MHz and 27.025 MHz
+store 0 (VHF). The CPS shows the field read-only and derives it from Rx
+Freq; so does the driver (see ``_VFO_UHF_FROM_HZ``).
+"""
+_VFO_UHF_FROM_HZ = 300_000_000
+"""Lowest Rx Freq the CPS shows as UHF: 299.99999 MHz is VHF, 300.00000 MHz
+UHF (measured in the CPS VFO Mode screen)."""
 _VFO_STEP_CHOICES = [
-    ('2.5 kHz', 0),
-    ('5.0 kHz', 1),
-    ('6.25 kHz', 2),
-    ('10.0 kHz', 3),
-    ('12.5 kHz', 4),
-    ('25.0 kHz', 5),
+    ('2.5KHz', 0),
+    ('5.0KHz', 1),
+    ('6.25KHz', 2),
+    ('8.33KHz', 3),
+    ('10.0KHz', 4),
+    ('12.5KHz', 5),
+    ('20.0KHz', 6),
+    ('25.0KHz', 7),
+    ('50.0KHz', 8),
+    ('100.0KHz', 9),
 ]
-"""VFO step labels and stored step indexes."""
+"""Step Freq labels of the CPS and the stored index (byte 19, low nibble).
+
+Confirmed on a radio: 100.0KHz stores 9, 25.0KHz 7, 12.5KHz 5.
+"""
+_VFO_SCRAMBLE_CHOICES = [('OFF', 0)] + [(f'Scramble {n}', n) for n in range(1, 9)]
+"""Scramble labels of the CPS and the stored values 0-8 (byte 16, high nibble)."""
+_VFO_SIGNALLING_CHOICES = [(str(n + 1), n) for n in range(15)]
+"""Signalling labels of the CPS (1-15) and the stored values 0-14.
+
+The CPS stores the shown number minus one (byte 14, low nibble); confirmed
+on a radio: 15 stores 14, 1 stores 0. A stored 15 is not offered and shows
+as ``Unknown (15)``, the stored value.
+"""
+_VFO_BUSY_LOCKOUT_CHOICES = [('OFF', False), ('ON', True)]
+"""Busy Lockout labels of the CPS and the flag value (byte 13, bit 0)."""
+_CTCSS_TONES = (
+    67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5,
+    94.8, 97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3,
+    131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9,
+    171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
+    203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1,
+)
+"""The 50 standard CTCSS tones in Hz, offered for the VFO QT/DQT fields.
+
+The CPS list starts with 67.0 and ends its CTCSS part with 254.1, like
+this one; the tones in between were not compared one by one.
+"""
+_VFO_TONE_LABELS = (['OFF'] + [f'{hz:.1f}' for hz in _CTCSS_TONES] + list(_DCS_CODES))
+"""Rx/Tx QT/DQT choices as the CPS writes them: ``OFF``, the CTCSS tones
+(e.g. ``88.5``), then the DCS codes of ``_DCS_CODES`` (``D023N`` ...
+``D754I``)."""
 
 def _build_memory_extra(channel: ChannelRecord) -> RadioSettingGroup:
     """Build the per-channel *RT-950 Pro Extras* settings shown by CHIRP.
@@ -4502,23 +4525,24 @@ def _parse_frequency(text: str) -> Optional[int]:
         raise ValueError("Frequency must be positive")
     return hz
 
-def _make_bool_setting(name: str, label: str, current: bool, callback, *args) -> RadioSetting:
-    """Create a boolean ``RadioSetting`` with an apply callback.
-
-    Args:
-        name: Internal setting name.
-        label: Label shown in CHIRP.
-        current: Current value.
-        callback: Called as ``callback(setting, *args)`` on apply.
-        *args: Extra arguments for ``callback``.
-
-    Returns:
-        RadioSetting: The configured setting.
-    """
-    value = RadioSettingValueBoolean(bool(current))
-    setting = RadioSetting(name, label, value)
-    setting.set_apply_callback(callback, *args)
-    return setting
+_MOD_WORK_MODE_CHOICES = [('VFO Mode', 0), ('CH Mode', 1)]
+"""Work Mode labels of the CPS and the stored values (modulation byte 33).
+VFO Mode = 0 confirmed on a radio; CH Mode = 1 follows the CPS list order."""
+_MOD_MODULATION_CHOICES = [('FM', 0), ('AM', 1), ('LSB', 2), ('USB', 3), ('CW', 4)]
+"""Modulation Mode labels of the CPS and the stored values (byte 67).
+AM = 1 confirmed on a radio; the others follow the CPS list order."""
+_MOD_AM_STEP_CHOICES = [('1K', 0), ('5K', 1), ('10K', 2), ('100K', 3)]
+"""AM Step Freq labels of the CPS and the stored values (byte 151).
+1K = 0 confirmed on a radio; the others follow the CPS list order."""
+_MOD_SSB_STEP_CHOICES = [('1K', 0), ('5K', 1), ('10K', 2), ('100K', 3), ('500K', 4),
+                         ('1000K', 5)]
+"""SSB Step Freq labels of the CPS and the stored values (byte 150).
+1K = 0 confirmed on a radio; the others follow the CPS list order."""
+_MOD_RX_GAIN_CHOICES = ([('AGC', 0), ('0dB', 1)]
+                        + [(f'-{n}dB', n + 1) for n in range(1, 36)])
+"""AM/SSB Rx Gain labels of the CPS (AGC, 0dB, -1dB ... -35dB; 37 entries)
+and the stored values 0-36 (bytes 68 and 152). AGC = 0 confirmed on a radio;
+the others follow the CPS list order."""
 
 
 def _make_integer_setting(
@@ -4544,166 +4568,180 @@ def _make_integer_setting(
     return setting
 
 
+def _unknown_label(value) -> str:
+    """Return the list label for a stored value the CPS does not offer.
+
+    Args:
+        value: The stored value (e.g. ``3`` for an offset direction).
+
+    Returns:
+        str: ``"Unknown (<value>)"``, e.g. ``"Unknown (3)"``.
+    """
+    return f'Unknown ({value})'
+
+
+def _make_list_setting(name: str, label: str, choices, current, target, attr: str) -> RadioSetting:
+    """Create a list setting for one field of a settings object.
+
+    Used for the VFO and modulation screens. The options are the labels of
+    ``choices``. A current value that is not in ``choices`` gets an extra
+    option, which is selected: ``Not set`` for ``None`` (byte 0xFF), else
+    one made by :func:`_unknown_label`. Choosing it (or leaving it) keeps the
+    stored value, see :func:`_apply_list_choice`.
+
+    Args:
+        name: Internal setting name, e.g. ``"vfo.0.step"``.
+        label: Label shown in CHIRP, as in the CPS (e.g. ``"Step Freq"``).
+        choices: ``(label, value)`` pairs in CPS order.
+        current: The field's current value.
+        target: Object the callback updates (a :class:`VFOSettings` or
+            :class:`ModulationSettings`).
+        attr: Name of the field on ``target``.
+
+    Returns:
+        RadioSetting: The setting, wired to :func:`_apply_list_choice`.
+    """
+    labels = [text for text, _ in choices]
+    values = [value for _, value in choices]
+    if current in values:
+        index = values.index(current)
+    else:
+        labels.append('Not set' if current is None else _unknown_label(current))
+        index = len(labels) - 1
+    setting = RadioSetting(name, label, RadioSettingValueList(labels, current_index=index))
+    setting.set_apply_callback(_apply_list_choice, target, attr, choices)
+    return setting
+
+
+def _make_vfo_tone(name: str, label: str, tone: ToneSetting, vfo, attr: str) -> RadioSetting:
+    """Create a Rx or Tx QT/DQT list setting for one VFO.
+
+    The options are ``_VFO_TONE_LABELS``. A tone that is not in that list
+    (a non-standard CTCSS value) gets an extra option made by
+    :func:`_unknown_label` with the tone as the CPS writes it; it stays
+    unchanged unless another tone is chosen (see :func:`_apply_vfo_tone`).
+    An unknown DCS index is decoded as OFF and shown as OFF; its bytes are
+    kept unless another tone is chosen.
+
+    Args:
+        name: Internal setting name, e.g. ``"vfo.0.rx_tone"``.
+        label: ``"Rx QT/DQT"`` or ``"Tx QT/DQT"``.
+        tone: The current tone.
+        vfo: VFO entry the callback updates.
+        attr: ``"rx_tone"`` or ``"tx_tone"``.
+
+    Returns:
+        RadioSetting: The setting, wired to :func:`_apply_vfo_tone`.
+    """
+    labels = list(_VFO_TONE_LABELS)
+    shown = tone.to_display()
+    if shown in labels:
+        index = labels.index(shown)
+    else:
+        labels.append(_unknown_label(shown))
+        index = len(labels) - 1
+    setting = RadioSetting(name, label, RadioSettingValueList(labels, current_index=index))
+    setting.set_apply_callback(_apply_vfo_tone, vfo, attr)
+    return setting
+
+
+def _make_vfo_frequency(name: str, label: str, hz: Optional[int], callback, vfo) -> RadioSetting:
+    """Create a frequency text setting (MHz) for one VFO.
+
+    Args:
+        name: Internal setting name, e.g. ``"vfo.0.freq"``.
+        label: ``"Rx Freq"`` or ``"Offset Freq"``.
+        hz: Current frequency in Hz, or ``None`` (shown empty).
+        callback: :func:`_apply_vfo_frequency` or :func:`_apply_vfo_offset`.
+        vfo: VFO entry the callback updates.
+
+    Returns:
+        RadioSetting: The setting, wired to ``callback``.
+    """
+    value = RadioSettingValueString(0, 12, _format_frequency(hz) or '', autopad=False)
+    setting = RadioSetting(name, label, value)
+    setting.set_apply_callback(callback, vfo)
+    return setting
+
+
 def _build_vfo_group(vfos: Optional[List[VFOSettings]]) -> RadioSettingGroup:
     """Build the *VFO Profiles* settings group (one subgroup per VFO).
+
+    Each subgroup (``VFO-A`` to ``VFO-C``) shows the fields of the CPS
+    *VFO Mode* screen, with its labels, choices and order: Rx Freq,
+    Rx QT/DQT, Tx QT/DQT, Busy Lockout, Offset Dir, Signalling, Tx Power,
+    Scramble, Bandwidth, Encryption, RxModulation, Freq Band (read-only, no
+    callback), Step Freq and Offset Freq. Learn FHSS and the offset
+    direction "split" are not shown, as in the CPS; their stored bits are
+    kept. A stored value outside a list is shown as ``Unknown (<value>)``
+    and left unchanged on apply. Exceptions: a power nibble above 2 is shown
+    as Low and an unknown DCS index as OFF; both are kept unless that field
+    is edited, and OFF cannot be chosen to clear such a DCS index.
 
     Args:
         vfos: VFO entries, or ``None``.
 
     Returns:
-        RadioSettingGroup: One subgroup per VFO with RX frequency, offset
-        direction, offset, TX power, bandwidth, RX modulation, busy lockout,
-        learn FHSS, scrambler code (0-9), encryption, step, frequency band and
-        signalling group (0-15). Empty if ``vfos`` is empty or ``None``.
+        RadioSettingGroup: One subgroup per VFO; empty if ``vfos`` is empty
+        or ``None``.
     """
     group = RadioSettingGroup('vfo', 'VFO Profiles')
     if not vfos:
         return group
     for idx, vfo in enumerate(vfos):
-        label = _VFO_LABELS[idx] if idx < len(_VFO_LABELS) else str(idx)
-        subgroup = RadioSettingGroup(f'vfo.{idx}', f'VFO {label}')
-
-        freq_value = RadioSettingValueString(
-            0, 12, _format_frequency(vfo.rx_hz) or '', autopad=False
-        )
-        freq_setting = RadioSetting(f'vfo.{idx}.freq', 'RX Frequency', freq_value)
-        freq_setting.set_apply_callback(_apply_vfo_frequency, vfo)
-        subgroup.append(freq_setting)
-
-        offset_labels = [label for label, _ in _VFO_OFFSET_CHOICES]
-        offset_values = [value for _, value in _VFO_OFFSET_CHOICES]
-        offset_index = (
-            offset_values.index(vfo.offset_direction)
-            if vfo.offset_direction in offset_values
-            else 0
-        )
-        offset_setting = RadioSetting(
-            f'vfo.{idx}.offset_direction',
-            'Offset Direction',
-            RadioSettingValueList(offset_labels, current_index=offset_index),
-        )
-        offset_setting.set_apply_callback(_apply_vfo_offset_direction, vfo)
-        subgroup.append(offset_setting)
-
-        offset_value = RadioSettingValueString(
-            0, 12, _format_frequency(vfo.offset_hz) or '', autopad=False
-        )
-        offset_setting_value = RadioSetting(f'vfo.{idx}.offset', 'Offset Frequency', offset_value)
-        offset_setting_value.set_apply_callback(_apply_vfo_offset, vfo)
-        subgroup.append(offset_setting_value)
-
-        power_labels = [label for label, _ in _VFO_POWER_CHOICES]
-        power_values = [value for _, value in _VFO_POWER_CHOICES]
-        power_index = power_values.index(vfo.tx_power) if vfo.tx_power in power_values else 0
-        power_setting = RadioSetting(
-            f'vfo.{idx}.power',
-            'TX Power',
-            RadioSettingValueList(power_labels, current_index=power_index),
-        )
-        power_setting.set_apply_callback(_apply_vfo_power, vfo)
-        subgroup.append(power_setting)
-
-        bandwidth_labels = [label for label, _ in _VFO_BANDWIDTH_CHOICES]
-        bandwidth_values = [value for _, value in _VFO_BANDWIDTH_CHOICES]
-        bandwidth_index = (
-            bandwidth_values.index(vfo.bandwidth) if vfo.bandwidth in bandwidth_values else 0
-        )
-        bandwidth_setting = RadioSetting(
-            f'vfo.{idx}.bandwidth',
-            'Bandwidth',
-            RadioSettingValueList(bandwidth_labels, current_index=bandwidth_index),
-        )
-        bandwidth_setting.set_apply_callback(_apply_vfo_bandwidth, vfo)
-        subgroup.append(bandwidth_setting)
-
-        modulation_labels = [label for label, _ in _VFO_MODULATION_CHOICES]
-        modulation_values = [value for _, value in _VFO_MODULATION_CHOICES]
-        modulation_index = (
-            modulation_values.index(vfo.rx_modulation)
-            if vfo.rx_modulation in modulation_values
-            else 0
-        )
-        modulation_setting = RadioSetting(
-            f'vfo.{idx}.modulation',
-            'RX Modulation',
-            RadioSettingValueList(modulation_labels, current_index=modulation_index),
-        )
-        modulation_setting.set_apply_callback(_apply_vfo_modulation, vfo)
-        subgroup.append(modulation_setting)
-
-        subgroup.append(
-            _make_bool_setting(
-                f'vfo.{idx}.busy_lockout',
-                'Busy Lockout',
-                vfo.busy_lockout,
-                _apply_vfo_busy_lockout,
-                vfo,
-            )
-        )
-        subgroup.append(
-            _make_bool_setting(
-                f'vfo.{idx}.fhss', 'Learn FHSS', vfo.learn_fhss, _apply_vfo_learn_fhss, vfo
-            )
-        )
-
-        scrambler_setting = RadioSetting(
-            f'vfo.{idx}.scrambler',
-            'Scrambler Code',
-            RadioSettingValueInteger(0, 9, int(vfo.scrambler)),
-        )
-        scrambler_setting.set_apply_callback(_apply_vfo_scrambler, vfo)
-        subgroup.append(scrambler_setting)
-
-        encryption_labels = [label for label, _ in _VFO_ENCRYPTION_CHOICES]
-        encryption_values = [value for _, value in _VFO_ENCRYPTION_CHOICES]
-        encryption_index = (
-            encryption_values.index(vfo.encryption) if vfo.encryption in encryption_values else 0
-        )
-        encryption_setting = RadioSetting(
-            f'vfo.{idx}.encryption',
-            'Encryption Mode',
-            RadioSettingValueList(encryption_labels, current_index=encryption_index),
-        )
-        encryption_setting.set_apply_callback(_apply_vfo_encryption, vfo)
-        subgroup.append(encryption_setting)
-
-        step_labels = [label for label, _ in _VFO_STEP_CHOICES]
-        step_values = [value for _, value in _VFO_STEP_CHOICES]
-        step_index = (
-            step_values.index(vfo.step_freq_index) if vfo.step_freq_index in step_values else 0
-        )
-        step_setting = RadioSetting(
-            f'vfo.{idx}.step',
-            'Step Size',
-            RadioSettingValueList(step_labels, current_index=step_index),
-        )
-        step_setting.set_apply_callback(_apply_vfo_step, vfo)
-        subgroup.append(step_setting)
-
-        band_labels = [label for label, _ in _VFO_BAND_CHOICES]
+        letter = _VFO_LABELS[idx] if idx < len(_VFO_LABELS) else str(idx)
+        sub = RadioSettingGroup(f'vfo.{idx}', f'VFO-{letter}')
+        key = f'vfo.{idx}'
+        sub.append(_make_vfo_frequency(f'{key}.freq', 'Rx Freq', vfo.rx_hz,
+                                       _apply_vfo_frequency, vfo))
+        sub.append(_make_vfo_tone(f'{key}.rx_tone', 'Rx QT/DQT', vfo.rx_tone, vfo, 'rx_tone'))
+        sub.append(_make_vfo_tone(f'{key}.tx_tone', 'Tx QT/DQT', vfo.tx_tone, vfo, 'tx_tone'))
+        sub.append(_make_list_setting(f'{key}.busy_lockout', 'Busy Lockout',
+                                  _VFO_BUSY_LOCKOUT_CHOICES, vfo.busy_lockout, vfo,
+                                  'busy_lockout'))
+        sub.append(_make_list_setting(f'{key}.offset_direction', 'Offset Dir',
+                                  _VFO_OFFSET_CHOICES, vfo.offset_direction, vfo,
+                                  'offset_direction'))
+        sub.append(_make_list_setting(f'{key}.signalling_group', 'Signalling',
+                                  _VFO_SIGNALLING_CHOICES, vfo.signalling_group, vfo,
+                                  'signalling_group'))
+        sub.append(_make_list_setting(f'{key}.power', 'Tx Power', _VFO_POWER_CHOICES,
+                                  vfo.tx_power, vfo, 'tx_power'))
+        sub.append(_make_list_setting(f'{key}.scrambler', 'Scramble', _VFO_SCRAMBLE_CHOICES,
+                                  vfo.scrambler, vfo, 'scrambler'))
+        sub.append(_make_list_setting(f'{key}.bandwidth', 'Bandwidth', _VFO_BANDWIDTH_CHOICES,
+                                  vfo.bandwidth, vfo, 'bandwidth'))
+        sub.append(_make_list_setting(f'{key}.encryption', 'Encryption', _VFO_ENCRYPTION_CHOICES,
+                                  vfo.encryption, vfo, 'encryption'))
+        sub.append(_make_list_setting(f'{key}.modulation', 'RxModulation',
+                                  _VFO_MODULATION_CHOICES, vfo.rx_modulation, vfo,
+                                  'rx_modulation'))
+        band_labels = [text for text, _ in _VFO_BAND_CHOICES]
         band_values = [value for _, value in _VFO_BAND_CHOICES]
-        band_index = band_values.index(vfo.freq_band) if vfo.freq_band in band_values else 0
-        freq_band_setting = RadioSetting(
-            f'vfo.{idx}.freq_band',
-            'Frequency Band',
-            RadioSettingValueList(band_labels, current_index=band_index),
-        )
-        freq_band_setting.set_apply_callback(_apply_vfo_freq_band, vfo)
-        subgroup.append(freq_band_setting)
-
-        signalling_setting = RadioSetting(
-            f'vfo.{idx}.signalling_group',
-            'Signalling Group',
-            RadioSettingValueInteger(0, 15, int(vfo.signalling_group)),
-        )
-        signalling_setting.set_apply_callback(_apply_vfo_signalling, vfo)
-        subgroup.append(signalling_setting)
-
-        group.append(subgroup)
+        if vfo.freq_band in band_values:
+            band_index = band_values.index(vfo.freq_band)
+        else:
+            band_labels.append(_unknown_label(vfo.freq_band))
+            band_index = len(band_labels) - 1
+        band_value = RadioSettingValueList(band_labels, current_index=band_index)
+        band_value.set_mutable(False)
+        sub.append(RadioSetting(f'{key}.freq_band', 'Freq Band', band_value))
+        sub.append(_make_list_setting(f'{key}.step', 'Step Freq', _VFO_STEP_CHOICES,
+                                  vfo.step_freq_index, vfo, 'step_freq_index'))
+        sub.append(_make_vfo_frequency(f'{key}.offset', 'Offset Freq', vfo.offset_hz,
+                                       _apply_vfo_offset, vfo))
+        group.append(sub)
     return group
 
 def _build_modulation_group(modulation: ModulationSettings) -> RadioSettingGroup:
     """Build the *Broadcast/Modulation* settings group.
+
+    The global settings follow the CPS screen *FM/AM/SSB Modulation*: Work
+    Mode, Modulation Mode, AM/SSB Step Freq and AM/SSB Rx Gain are lists with
+    the CPS labels (``_MOD_*_CHOICES``); a field that is not set (0xFF) shows
+    ``Not set`` and is left unchanged unless a value is chosen. The current
+    FM/AM/SSB channel is a number 0-14, the range the decoder returns (the
+    CPS does not show it).
 
     Args:
         modulation: Modulation settings.
@@ -4714,114 +4752,26 @@ def _build_modulation_group(modulation: ModulationSettings) -> RadioSettingGroup
     """
     group = RadioSettingGroup('modulation', 'Broadcast/Modulation')
     global_group = RadioSettingGroup('modulation.global', 'Global Settings')
-    global_group.append(
-        _make_integer_setting(
-            'modulation.fm_current_channel',
-            'FM Current Channel',
-            modulation.fm_current_channel,
-            0,
-            15,
-            _apply_modulation_int,
-            modulation,
-            'fm_current_channel',
+    for key, label in (('fm_current_channel', 'FM Current Channel'),
+                       ('am_current_channel', 'AM Current Channel'),
+                       ('ssb_current_channel', 'SSB Current Channel')):
+        global_group.append(
+            _make_integer_setting(
+                f'modulation.{key}', label, getattr(modulation, key), 0, 14,
+                _apply_modulation_int, modulation, key,
+            )
         )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.am_current_channel',
-            'AM Current Channel',
-            modulation.am_current_channel,
-            0,
-            15,
-            _apply_modulation_int,
-            modulation,
-            'am_current_channel',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.ssb_current_channel',
-            'SSB Current Channel',
-            modulation.ssb_current_channel,
-            0,
-            15,
-            _apply_modulation_int,
-            modulation,
-            'ssb_current_channel',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.work_mode',
-            'Work Mode',
-            modulation.work_mode,
-            0,
-            3,
-            _apply_modulation_int,
-            modulation,
-            'work_mode',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.modulation_mode',
-            'Modulation Mode',
-            modulation.modulation_mode,
-            0,
-            5,
-            _apply_modulation_int,
-            modulation,
-            'modulation_mode',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.am_step',
-            'AM Step Index',
-            modulation.am_step_index,
-            0,
-            7,
-            _apply_modulation_int,
-            modulation,
-            'am_step_index',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.am_rx_gain',
-            'AM RX Gain',
-            modulation.am_rx_gain,
-            0,
-            255,
-            _apply_modulation_int,
-            modulation,
-            'am_rx_gain',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.ssb_step',
-            'SSB Step Index',
-            modulation.ssb_step_index,
-            0,
-            7,
-            _apply_modulation_int,
-            modulation,
-            'ssb_step_index',
-        )
-    )
-    global_group.append(
-        _make_integer_setting(
-            'modulation.ssb_rx_gain',
-            'SSB RX Gain',
-            modulation.ssb_rx_gain,
-            0,
-            255,
-            _apply_modulation_int,
-            modulation,
-            'ssb_rx_gain',
-        )
-    )
+    for key, label, choices, attr in (
+            ('work_mode', 'Work Mode', _MOD_WORK_MODE_CHOICES, 'work_mode'),
+            ('modulation_mode', 'Modulation Mode', _MOD_MODULATION_CHOICES,
+             'modulation_mode'),
+            ('am_step', 'AM Step Freq', _MOD_AM_STEP_CHOICES, 'am_step_index'),
+            ('am_rx_gain', 'AM Rx Gain', _MOD_RX_GAIN_CHOICES, 'am_rx_gain'),
+            ('ssb_step', 'SSB Step Freq', _MOD_SSB_STEP_CHOICES, 'ssb_step_index'),
+            ('ssb_rx_gain', 'SSB Rx Gain', _MOD_RX_GAIN_CHOICES, 'ssb_rx_gain')):
+        global_group.append(
+            _make_list_setting(f'modulation.{key}', label, choices,
+                               getattr(modulation, attr), modulation, attr))
     group.append(global_group)
 
     if modulation.channels:
@@ -5017,7 +4967,12 @@ def _apply_modulation_channel_beat(rsetting, modulation, index):
     modulation.channels[index].ssb_beat_offset = value
 
 def _apply_vfo_frequency(rsetting, vfo):
-    """Settings callback: set the VFO receive frequency (empty clears it).
+    """Settings callback: set the VFO receive frequency.
+
+    An empty field sets ``rx_hz`` to ``None``; :func:`encode_vfo_section`
+    then keeps the stored digits. A changed frequency also sets
+    ``freq_band`` as the CPS does: 1 (UHF) from ``_VFO_UHF_FROM_HZ`` (300
+    MHz) up, else 0 (VHF).
 
     Args:
         rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
@@ -5037,22 +4992,18 @@ def _apply_vfo_frequency(rsetting, vfo):
         vfo.rx_hz = None
         return
     try:
-        vfo.rx_hz = _parse_frequency(value)
+        rx_hz = _parse_frequency(value)
     except ValueError as exc:
         raise errors.RadioError(str(exc)) from exc
-
-def _apply_vfo_offset_direction(rsetting, vfo):
-    """Settings callback: set the VFO offset direction from the list choice.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    index = _value_as_index(rsetting.value, _VFO_OFFSET_CHOICES)
-    vfo.offset_direction = _VFO_OFFSET_CHOICES[index][1]
+    if rx_hz != vfo.rx_hz:
+        vfo.rx_hz = rx_hz
+        vfo.freq_band = 1 if rx_hz >= _VFO_UHF_FROM_HZ else 0
 
 def _apply_vfo_offset(rsetting, vfo):
-    """Settings callback: set the VFO offset (empty clears it).
+    """Settings callback: set the VFO offset.
+
+    An empty field sets ``offset_hz`` to ``None``; :func:`encode_vfo_section`
+    then keeps the stored digits.
 
     Args:
         rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
@@ -5076,107 +5027,61 @@ def _apply_vfo_offset(rsetting, vfo):
     except ValueError as exc:
         raise errors.RadioError(str(exc)) from exc
 
-def _apply_vfo_power(rsetting, vfo):
-    """Settings callback: set the VFO transmit power from the list choice.
+def _apply_list_choice(rsetting, target, attr, choices):
+    """Settings callback: set one field from a list choice.
+
+    Looks the chosen label up in ``choices`` and stores its value in
+    ``target.<attr>``. A label that is not in ``choices`` (the ``Not set`` or
+    ``Unknown (<value>)`` option of :func:`_make_list_setting`) leaves the
+    field unchanged, so a stored value the CPS does not offer survives a
+    settings apply.
+
+    Args:
+        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
+        target: Object to update (a :class:`VFOSettings` or
+            :class:`ModulationSettings`).
+        attr: Name of the field on ``target``.
+        choices: ``(label, value)`` pairs the setting was built from.
+
+    Returns:
+        None: Nothing; ``target`` is updated in place.
+    """
+    chosen = str(rsetting.value)
+    for text, value in choices:
+        if text == chosen:
+            setattr(target, attr, value)
+            return
+
+
+def _apply_vfo_tone(rsetting, vfo, attr):
+    """Settings callback: set the VFO receive or transmit tone.
+
+    The tone is only replaced when the chosen label differs from the current
+    tone as the CPS writes it (:meth:`ToneSetting.to_display`), so an
+    unchanged tone keeps its original bytes. ``OFF`` clears the tone, a
+    label starting with ``D`` (``D023N``) sets that DCS code and polarity,
+    any other label of ``_VFO_TONE_LABELS`` sets that CTCSS tone in Hz. An
+    ``Unknown (...)`` label leaves the tone unchanged.
 
     Args:
         rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
         vfo: VFO entry to update.
+        attr: ``"rx_tone"`` or ``"tx_tone"``.
+
+    Returns:
+        None: Nothing; ``vfo`` is updated in place.
     """
-    index = _value_as_index(rsetting.value, _VFO_POWER_CHOICES)
-    vfo.tx_power = _VFO_POWER_CHOICES[index][1]
-
-def _apply_vfo_bandwidth(rsetting, vfo):
-    """Settings callback: set the VFO bandwidth from the list choice.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    index = _value_as_index(rsetting.value, _VFO_BANDWIDTH_CHOICES)
-    vfo.bandwidth = _VFO_BANDWIDTH_CHOICES[index][1]
-
-def _apply_vfo_modulation(rsetting, vfo):
-    """Settings callback: set the VFO receive modulation from the list choice.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    index = _value_as_index(rsetting.value, _VFO_MODULATION_CHOICES)
-    vfo.rx_modulation = _VFO_MODULATION_CHOICES[index][1]
-
-def _apply_vfo_busy_lockout(rsetting, vfo):
-    """Settings callback: set the VFO busy-channel lockout flag.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    vfo.busy_lockout = bool(_value_as_bool(rsetting.value))
-
-def _apply_vfo_learn_fhss(rsetting, vfo):
-    """Settings callback: set the VFO learn-FHSS flag.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    vfo.learn_fhss = bool(_value_as_bool(rsetting.value))
-
-def _apply_vfo_scrambler(rsetting, vfo):
-    """Settings callback: set the VFO scrambler code.
-
-    Negative values become 0; the value is then masked to 4 bits (0-15).
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    vfo.scrambler = max(0, _value_as_int(rsetting.value)) & 0x0F
-
-def _apply_vfo_encryption(rsetting, vfo):
-    """Settings callback: set the VFO encryption mode from the list choice.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    index = _value_as_index(rsetting.value, _VFO_ENCRYPTION_CHOICES)
-    vfo.encryption = _VFO_ENCRYPTION_CHOICES[index][1]
-
-def _apply_vfo_step(rsetting, vfo):
-    """Settings callback: set the VFO step index from the list choice.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    index = _value_as_index(rsetting.value, _VFO_STEP_CHOICES)
-    vfo.step_freq_index = _VFO_STEP_CHOICES[index][1]
-
-def _apply_vfo_freq_band(rsetting, vfo):
-    """Settings callback: set the VFO band index (low nibble).
-
-    Warning:
-        Known issue: the value is read with :func:`_value_as_int`, but the
-        UI offers a list whose CHIRP value is the label text, so this sets
-        the band to 0 whenever settings are applied.
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    vfo.freq_band = max(0, _value_as_int(rsetting.value)) & 0x0F
-
-def _apply_vfo_signalling(rsetting, vfo):
-    """Settings callback: set the VFO signalling group (low nibble).
-
-    Args:
-        rsetting: The ``RadioSetting`` being applied; its ``value`` is read.
-        vfo: VFO entry to update.
-    """
-    vfo.signalling_group = max(0, _value_as_int(rsetting.value)) & 0x0F
+    chosen = str(rsetting.value)
+    current = getattr(vfo, attr)
+    if chosen == current.to_display() or chosen not in _VFO_TONE_LABELS:
+        return
+    if chosen == 'OFF':
+        tone = ToneSetting.off()
+    elif chosen.startswith('D'):
+        tone = ToneSetting.dcs(int(chosen[1:4]), chosen[4])
+    else:
+        tone = ToneSetting.ctcss(float(chosen))
+    setattr(vfo, attr, tone)
 
 def _build_setting_value(meta, current):
     """Create the CHIRP value object described by a UI table entry.
@@ -5509,7 +5414,7 @@ def _apply_dtmf_group(rsetting, dtmf_settings, index):
 _WRITE_PLAN: Tuple[Tuple[int, Optional[int]], ...] = (
     (0, 0x7C00),   # channels
     (1, None),     # VFO
-    (2, None),     # function
+    (2, 0x80),     # function: 0x9000-0x907F only (0x9080-0x90FF unknown)
     (3, None),     # DTMF
     (4, None),     # modulation params
     (5, None),     # modulation names
@@ -5525,6 +5430,10 @@ means the full segment length. The image layout and the read order stay
 * channels: at most 0x0000-0x7BFF (990 channels rounded up to a 0x80
   block) instead of up to 0x7FFF; ``RT950ProRadio._write_options`` may
   limit this further to 0x77FF;
+* function settings: only the first block, 0x9000-0x907F (the driver uses
+  0x9000-0x905F). The second block, 0x9080-0x90FF, changed on a radio after
+  a CPS write while its meaning is unknown, so the driver leaves it to the
+  radio instead of writing back what it read;
 * zone names (0xC000) are written with the other 0x57 blocks, before the
   APRS segment, which is always last.
 """
@@ -5658,8 +5567,8 @@ u8 modulation_params[0x200];
 u8 modulation_names[0x300];
 u8 aprs[0x80];
 struct {
-  char name[10];
-  u8 unused[6];
+  char name[12];
+  u8 unused[4];
 } zone_names[10];
 u8 zone_names_pad[0x60];
 """ % (CHANNEL_COUNT,  # pylint: disable=consider-using-f-string
@@ -5698,23 +5607,33 @@ def _zone_label(image, zone: int) -> str:
 def _apply_zone_name(rsetting, image, index):
     """Settings callback: store an edited zone name in the image.
 
-    Surrounding spaces are stripped, non-ASCII characters are dropped and
-    the result is cut to ``ZONE_NAME_LENGTH`` (10). ``image.zone_names`` is
+    A value equal to the stored name is left as it is (also a stored name
+    longer than ``ZONE_NAME_LENGTH``). Otherwise surrounding spaces are
+    stripped, non-ASCII characters are dropped and the result is cut to
+    ``ZONE_NAME_LENGTH`` (12). ``image.zone_names`` is
     created (ten empty names) if it is ``None``.
 
     Args:
         rsetting: The CHIRP ``RadioSetting`` holding the new name.
         image: The :class:`RadioImage` to update.
         index: Zone index, 0-9.
+
+    Returns:
+        None: Nothing; ``image.zone_names`` is updated in place.
     """
     if image.zone_names is None:
         image.zone_names = [""] * ZONE_COUNT
     value = str(rsetting.value).strip()
+    if value == image.zone_names[index]:
+        return
     image.zone_names[index] = value.encode("ascii", errors="ignore").decode()[:ZONE_NAME_LENGTH]
 
 
 def _build_zone_group(image):
     """Build the *Zone Names* settings group (one string per zone).
+
+    Each field accepts ``ZONE_NAME_LENGTH`` (12) characters, or more when the
+    stored name is already longer (up to the 16-byte slot).
 
     Args:
         image: The :class:`RadioImage` providing the current names.
@@ -5726,7 +5645,10 @@ def _build_zone_group(image):
     group = RadioSettingGroup('zones', 'Zone Names')
     names = image.zone_names or [""] * ZONE_COUNT
     for index in range(ZONE_COUNT):
-        value = RadioSettingValueString(0, ZONE_NAME_LENGTH, names[index],
+        # A name longer than ZONE_NAME_LENGTH (written by other software; the
+        # slot holds 16 bytes) must still load, so allow its own length.
+        maximum = max(ZONE_NAME_LENGTH, len(names[index]))
+        value = RadioSettingValueString(0, maximum, names[index],
                                         autopad=False,
                                         charset=chirp_common.CHARSET_ASCII)
         setting = RadioSetting(f'zone_name_{index + 1}',
@@ -5734,6 +5656,45 @@ def _build_zone_group(image):
         setting.set_apply_callback(_apply_zone_name, image, index)
         group.append(setting)
     return group
+
+
+def _tone_to_chirp(tone: ToneSetting) -> tuple:
+    """Convert a radio tone into a CHIRP tone spec for ``split_tone_decode``.
+
+    Args:
+        tone: The radio tone.
+
+    Returns:
+        tuple: ``(mode, value, polarity)``: ``("", None, None)`` for no tone,
+        ``("Tone", hz, None)`` for CTCSS, ``("DTCS", code, "N" or "R")`` for
+        DCS (the radio's inverted ``I`` becomes CHIRP's reverse ``R``).
+    """
+    if tone.mode is ToneMode.CTCSS and tone.ctcss_hz is not None:
+        return ("Tone", tone.ctcss_hz, None)
+    if tone.mode is ToneMode.DCS and tone.dcs_code is not None:
+        polarity = "R" if (tone.dcs_polarity or "N").upper() == "I" else "N"
+        return ("DTCS", tone.dcs_code, polarity)
+    return ("", None, None)
+
+
+def _tone_from_chirp(mode: str, value, polarity) -> ToneSetting:
+    """Convert one CHIRP tone spec from ``split_tone_encode`` into a radio tone.
+
+    Args:
+        mode: ``"Tone"``, ``"DTCS"`` or ``""``.
+        value: CTCSS frequency in Hz or DCS code; a DCS code of 0 or a
+            missing value gives no tone.
+        polarity: CHIRP DCS polarity ``"N"`` or ``"R"`` (stored as ``"I"``),
+            or ``None``.
+
+    Returns:
+        ToneSetting: The radio tone.
+    """
+    if mode == "Tone" and value:
+        return ToneSetting.ctcss(float(value))
+    if mode == "DTCS" and value:
+        return ToneSetting.dcs(int(value), "I" if (polarity or "N").upper() == "R" else "N")
+    return ToneSetting.off()
 
 
 class RT950ProRadio(chirp_common.CloneModeRadio):
@@ -5840,7 +5801,9 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         rf.has_tuning_step = False
         rf.can_delete = True
         rf.can_odd_split = True
-        rf.valid_tmodes = ["", "Tone", "TSQL", "DTCS"]
+        rf.has_cross = True
+        rf.valid_tmodes = ["", "Tone", "TSQL", "DTCS", "Cross"]
+        rf.valid_cross_modes = list(chirp_common.CROSS_MODES)
         rf.valid_duplexes = ["", "+", "-", "split"]
         rf.valid_modes = ["FM", "NFM", "AM"]
         rf.valid_power_levels = _CHIRP_POWER_LEVELS
@@ -6257,9 +6220,11 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def set_settings(self, settings):  # type: ignore[override]
         """Apply edited settings to the image.
 
-        Runs the apply callback of every setting that has one (CHIRP passes
-        the whole tree, so every callback runs on each apply); the callbacks
-        write into the :class:`RadioImage`. Then clears the memory cache.
+        CHIRP passes the whole tree on every apply. The apply callback runs
+        only for settings whose value was changed (CHIRP's
+        ``RadioSetting.changed()``; without it, as with the stand-in classes,
+        every callback runs). The callbacks write into the
+        :class:`RadioImage`. Then clears the memory cache.
 
         Args:
             settings: The tree returned by :meth:`get_settings`, edited.
@@ -6276,8 +6241,15 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         if walker is None:
             raise errors.RadioError('Settings container missing walk()')
         for element in walker():
-            if isinstance(element, RadioSetting) and element.has_apply_callback():
-                element.run_apply_callback()
+            if not (isinstance(element, RadioSetting) and element.has_apply_callback()):
+                continue
+            # CHIRP marks a value as changed once the user edits it; unchanged
+            # settings are skipped, so a value the driver cannot show exactly
+            # (e.g. "not set", 0xFF) is never rewritten as a default.
+            changed = getattr(element, 'changed', None)
+            if changed is not None and not changed():
+                continue
+            element.run_apply_callback()
         self._memory_cache.clear()
     # ------------------------------------------------------------------
     # Memory translation helpers
@@ -6324,15 +6296,8 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         """Store a CHIRP ``Memory`` in the image.
 
         The sanitised result is cached and returned by later
-        :meth:`get_memory` calls.
-
-        Warning:
-            Known issue: for a DTCS memory whose TX code is 0, ``mem.tmode``
-            is set to ``""`` (see :meth:`_update_tones_from_memory`), so the
-            caller's object is modified. CHIRP's memory editor passes a
-            ``FrozenMemory``; there this logs an "Illegal set" warning (or
-            raises in strict mode). :class:`RT950ProZoneRadio` is not
-            affected because it passes a copy.
+        :meth:`get_memory` calls. ``mem`` is not modified, so CHIRP's
+        ``FrozenMemory`` can be passed directly.
 
         Args:
             mem: The CHIRP ``Memory`` to store; ``mem.number`` is 1-990.
@@ -6346,7 +6311,7 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         channel = image.channels[mem.number - 1]
         self._apply_memory_to_channel(mem, channel)
         # The cache holds the sanitised version that get_memory() returns
-        # from now on (mem itself is only changed in the DTCS-code-0 case).
+        # from now on.
         sanitized = self._channel_to_memory(mem.number, channel)
         self._memory_cache[mem.number] = sanitized
     # ------------------------------------------------------------------
@@ -6413,25 +6378,19 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def _apply_tones(self, mem, channel: ChannelRecord) -> None:
         """Translate the channel's TX/RX tones into CHIRP tone fields.
 
-        Mapping: TX CTCSS only gives ``Tone``; TX and RX CTCSS give ``TSQL``;
-        any DCS gives ``DTCS``. DCS fields default to a valid code (023) even
-        when unused, because CHIRP's CSV export validates them.
-
-        Warning:
-            Known issue: the radio's inverted polarity is ``I`` while CHIRP uses
-            ``R``; an inverted code yields a polarity such as ``"IN"`` that
-            CHIRP does not accept. Without ``Cross`` mode some combinations
-            are lossy: different TX/RX CTCSS become ``TSQL`` with the TX tone
-            for both; RX-only CTCSS becomes no tone; RX-only DCS becomes
-            ``DTCS`` with the RX code also used for TX; TX DCS with RX CTCSS
-            loses the RX tone.
+        Uses CHIRP's ``chirp_common.split_tone_decode``: no tone gives ``""``,
+        TX CTCSS only ``Tone``, equal TX/RX CTCSS ``TSQL``, equal TX/RX DCS
+        code ``DTCS``, and every other combination ``Cross`` with the
+        matching ``cross_mode`` (e.g. ``"->Tone"`` for an RX-only tone). The
+        radio's inverted DCS polarity ``I`` is given to CHIRP as ``R``. DCS
+        fields default to a valid code (023) when unused, because CHIRP's CSV
+        export validates them.
 
         Args:
-            mem: The CHIRP ``Memory`` to update (``tmode``, tones, DCS fields).
+            mem: The CHIRP ``Memory`` to update (``tmode``, ``cross_mode``,
+                tones, DCS fields).
             channel: The channel record providing ``tx_tone`` and ``rx_tone``.
         """
-        tx = channel.tx_tone
-        rx = channel.rx_tone
         # CHIRP's CSV exporter validates DtcsCode/RxDtcsCode even when
         # tmode is not DTCS. Use a valid default (e.g. 023) instead of 000
         # to avoid exporter errors.
@@ -6439,40 +6398,9 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         mem.dtcs = default_dcs
         mem.rx_dtcs = default_dcs
         mem.dtcs_polarity = "NN"
-        if tx.is_off and rx.is_off:
-            mem.tmode = ""
-            return
-        if tx.mode is ToneMode.CTCSS and rx.is_off:
-            mem.tmode = "Tone"
-            mem.rtone = tx.ctcss_hz or 0.0
-            return
-        if tx.mode is ToneMode.CTCSS and rx.mode is ToneMode.CTCSS:
-            mem.tmode = "TSQL"
-            tone = tx.ctcss_hz or rx.ctcss_hz or 0.0
-            mem.rtone = tone
-            mem.ctone = tone
-            return
-        if tx.mode is ToneMode.DCS and tx.dcs_code is not None:
-            tx_pol = (tx.dcs_polarity or "N").upper()
-            if rx.mode is ToneMode.DCS and rx.dcs_code is not None:
-                mem.tmode = "DTCS"
-                mem.dtcs = tx.dcs_code
-                mem.rx_dtcs = rx.dcs_code
-                rx_pol = (rx.dcs_polarity or "N").upper()
-            else:
-                mem.tmode = "DTCS"
-                mem.dtcs = tx.dcs_code
-                mem.rx_dtcs = tx.dcs_code
-                rx_pol = "N"
-            mem.dtcs_polarity = tx_pol + rx_pol
-            return
-        if rx.mode is ToneMode.DCS and rx.dcs_code is not None:
-            mem.tmode = "DTCS"
-            mem.dtcs = rx.dcs_code
-            mem.rx_dtcs = rx.dcs_code
-            mem.dtcs_polarity = "N" + (rx.dcs_polarity or "N").upper()
-            return
         mem.tmode = ""
+        chirp_common.split_tone_decode(
+            mem, _tone_to_chirp(channel.tx_tone), _tone_to_chirp(channel.rx_tone))
 
     def _apply_memory_to_channel(self, mem, channel: ChannelRecord) -> None:
         """Copy a CHIRP ``Memory`` into a channel record.
@@ -6482,12 +6410,8 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         label is unknown) and skip are copied. Band rules: 118-137 MHz is
         forced to AM, wide, with ``tx_enabled`` cleared; 18-64 MHz is forced
         to FM. ``tx_enabled`` is never set back to True. Learn-FHSS and the
-        FHSS code are cleared. Scrambler (0-8) and encryption (0-2) come from
+        FHSS code are cleared. Scrambler (0-8) and encryption (0-3) come from
         the memory's extras; missing or out-of-range values become 0.
-
-        Warning:
-            Known issue: the extras offer encryption 0-3, but 3 is reset to 0
-            here.
 
         Args:
             mem: The CHIRP memory.
@@ -6523,7 +6447,7 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             channel.encryption = int(encryption_raw)
         except (TypeError, ValueError):
             channel.encryption = 0
-        if channel.encryption not in (0, 1, 2):
+        if channel.encryption not in (0, 1, 2, 3):
             channel.encryption = 0
         channel.learn_fhss = False
         channel.fhss_code = None
@@ -6567,51 +6491,19 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def _update_tones_from_memory(self, mem, channel: ChannelRecord) -> None:
         """Translate CHIRP tone fields into the channel's TX/RX tones.
 
-        A DTCS memory whose TX code (``dtcs``) is 0 is treated as no tone
-        (``mem.tmode`` is set to ``""``, which modifies ``mem``). An RX code
-        of 0 falls back to the TX code. ``TSQL`` uses ``rtone`` for TX and
-        ``ctone`` for RX, each falling back to the other.
-
-        Warning:
-            Known issue: CHIRP's reverse polarity ``R`` is passed on unchanged;
-            the radio's list only knows ``N`` and ``I``, so encoding such a tone
-            raises ``ValueError``.
+        Uses CHIRP's ``chirp_common.split_tone_encode``, so every tone mode
+        including ``Cross`` is honoured (``TSQL`` uses ``ctone`` for TX and
+        RX, as in CHIRP). CHIRP's reverse polarity ``R`` is stored as the
+        radio's ``I``. A DCS code of 0 is stored as no tone. ``mem`` is not
+        modified.
 
         Args:
-            mem: The CHIRP ``Memory`` to read; ``tmode`` is cleared for a DTCS
-                code of 0.
+            mem: The CHIRP ``Memory`` to read.
             channel: The channel record whose ``tx_tone``/``rx_tone`` are replaced.
         """
-        # Normalise any invalid DTCS entries (e.g., code 000 from CSV/UI)
-        if getattr(mem, "tmode", "") == "DTCS":
-            tx_code = getattr(mem, "dtcs", 0) or 0
-            rx_code = getattr(mem, "rx_dtcs", tx_code) or tx_code
-            if tx_code == 0 or rx_code == 0:
-                mem.tmode = ""
-        if mem.tmode == "":
-            channel.tx_tone = channel.tx_tone.__class__.off()
-            channel.rx_tone = channel.rx_tone.__class__.off()
-        elif mem.tmode == "Tone":
-            channel.tx_tone = channel.tx_tone.__class__.ctcss(mem.rtone)
-            channel.rx_tone = channel.rx_tone.__class__.off()
-        elif mem.tmode == "TSQL":
-            tone = mem.ctone or mem.rtone
-            channel.tx_tone = channel.tx_tone.__class__.ctcss(mem.rtone or tone)
-            channel.rx_tone = channel.rx_tone.__class__.ctcss(mem.ctone or tone)
-        elif mem.tmode == "DTCS":
-            polarity = getattr(mem, "dtcs_polarity", "NN") or "NN"
-            tx_pol = polarity[0] if len(polarity) >= 1 else "N"
-            rx_pol = polarity[1] if len(polarity) >= 2 else tx_pol
-            tx_code = getattr(mem, "dtcs", 0) or 0
-            rx_code = getattr(mem, "rx_dtcs", tx_code) or tx_code
-            if tx_code:
-                channel.tx_tone = channel.tx_tone.__class__.dcs(tx_code, tx_pol)
-            else:
-                channel.tx_tone = channel.tx_tone.__class__.off()
-            if rx_code:
-                channel.rx_tone = channel.rx_tone.__class__.dcs(rx_code, rx_pol)
-            else:
-                channel.rx_tone = channel.rx_tone.__class__.off()
+        tx_spec, rx_spec = chirp_common.split_tone_encode(mem)
+        channel.tx_tone = _tone_from_chirp(*tx_spec)
+        channel.rx_tone = _tone_from_chirp(*rx_spec)
 
 class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
     """One zone of the radio, shown by CHIRP as its own memory tab.

@@ -1,4 +1,4 @@
-# RT-950 Pro — CHIRP-driver: geheugenkaart en status (bijgewerkt 18-10-2026)
+# RT-950 Pro — CHIRP-driver: geheugenkaart en status (bijgewerkt 19-10-2026)
 
 Radio: Radtel RT-950 Pro, firmware 0.29 (10 x 99 zones). Vendor CPS: RT-950PRO_CPS v1.3.3 (20260622).
 Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @254d2cd, MIT), aangepast.
@@ -45,12 +45,17 @@ DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit 
 - Radio's met oude 960-kanaal-firmware (15 x 64): 960 x 32 = 0x7800, dus kanalen eindigen op 0x77FF. Een driver die 990 kanalen (tot 0x7BBF) schrijft, overschrijft daar 0x7800–0x7BBF — precies het gebied waar NeonPlug calibratie-achtige data zag. Driver moet firmware/indeling detecteren en bij 960-kanaal-firmware weigeren te schrijven (of alleen tot 0x77FF). Afleiding, niet getest.
 - Nieuwe instellingen uit CPS 1.3.x: driver moet instellingenblokken read-modify-write behandelen, nooit uit standaardwaarden opbouwen.
 
-## Bekende fouten (gevonden bij de review van 18-10-2026, nog niet opgelost)
-1. VFO-band wordt 0 bij elke settings-apply: `_apply_vfo_freq_band` leest een lijstwaarde met `_value_as_int`; CHIRP geeft de labeltekst terug → 0. Getest: band 2 → 0, byte 0x8012 wordt 0x00. Oplossing: `_value_as_index` + `_VFO_BAND_CHOICES` (zoals bij step).
-2. DCS-polariteit: radio gebruikt "I", CHIRP "R". Inverted DCS van de radio geeft CHIRP-polariteit "IN"/"NI" (ongeldig); "R" uit CHIRP geeft bij encoderen `ValueError: Unsupported DCS code D023R`. Oplossing: I↔R vertalen in `_apply_tones` en `_update_tones_from_memory`.
-3. Tonen zonder CHIRP-"Cross": alleen-RX-toon en gemengde CTCSS/DCS gaan verloren bij bewerken van zo'n kanaal.
-4. Settings-apply zet "niet ingesteld" (0xFF) om in een standaardwaarde (bv. APRS → write_aprs wordt True na alleen openen en toepassen).
+## Bekende fouten (gevonden bij de review van 18-10-2026; opgeloste punten gemarkeerd)
+1. *Opgelost in 0.1.5* (Freq Band is alleen-lezen en volgt Rx Freq, zoals in de CPS). VFO-band wordt 0 bij elke settings-apply: `_apply_vfo_freq_band` las een lijstwaarde met `_value_as_int`; CHIRP geeft de labeltekst terug → 0. Getest: band 2 → 0, byte 0x8012 wordt 0x00.
+2. *Opgelost in 0.1.5* (I↔R vertaald; gecontroleerd op een radio). DCS-polariteit: radio gebruikt "I", CHIRP "R". Inverted DCS van de radio geeft CHIRP-polariteit "IN"/"NI" (ongeldig); "R" uit CHIRP geeft bij encoderen `ValueError: Unsupported DCS code D023R`. Opgelost door I↔R te vertalen in `_tone_to_chirp` en `_tone_from_chirp`.
+3. *Opgelost in 0.1.5* (CHIRP-`Cross` met alle cross-modes; gecontroleerd op een radio). Tonen zonder CHIRP-"Cross": alleen-RX-toon en gemengde CTCSS/DCS gaan verloren bij bewerken van zo'n kanaal.
+4. *Opgelost in 0.1.5* (alleen gewijzigde instellingen worden toegepast). Settings-apply zet "niet ingesteld" (0xFF) om in een standaardwaarde (bv. APRS → write_aprs wordt True na alleen openen en toepassen).
 5. `_ToneInfo` is ongebruikt.
+6. *Opgelost in 0.1.5.* VFO-vermogen werd altijd als High gelezen; een andere VFO-wijziging schreef dan High terug.
+7. *Opgelost in 0.1.5* (alleen bewerkte velden worden geschreven). `encode_modulation_sections` schreef niet-ingestelde velden (0xFF) als 0x00 bij elke upload.
+8. *Opgelost in 0.1.5* (het memory-object wordt niet meer gewijzigd). `set_memory` wijzigde CHIRP's `FrozenMemory` bij een DTCS-kanaal met TX-code 0.
+9. *Opgelost in 0.1.5* (bereiken zoals in de CPS, gecontroleerd op een radio). Bereiken van zijtoetsen, APRS Timed Beacon Time en Radio Symbol, en kanaalencryptie 3.
+10. *Opgelost in 0.1.5* (opgeslagen waarden blijven staan tenzij bewerkt; hoge nibbles van bytes 12-13 blijven staan). `encode_aprs_section` normaliseerde waarden buiten bereik zonder bewerking; een bewerkt kanaal verloor de hoge nibbles van bytes 12-13.
 
 ## Route naar officiële CHIRP
 - PR op kk7ds/chirp: tests slagen, rebased, `Fixes/Related to #12180`, testimage `tests/images/Radtel_RT-950_Pro.img`, MemoryMapBytes, bestanden GPLv3 of zonder licentietekst.
@@ -59,8 +64,9 @@ DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit 
 - Voorstel in het Engels opgesteld voor issue #12180 (vragen: subklasse gewenst?, review door Fred?, testimage met neutrale kanalen ok?).
 
 ## Open
-- Bekende fouten 1–4 hierboven oplossen (eigen commit, met test).
+- Ongebruikte `_ToneInfo` verwijderen (bekende fout 5).
+- Een VFO-toon met een DCS-index die de driver niet kent wordt als OFF getoond; OFF kiezen wist hem dan niet.
+- Uitzoeken wat `0x9080–0x90FF` is (zie de geheugenkaart). Sinds 0.1.5 schrijft de driver van het functiesegment alleen `0x9000–0x907F`.
 - Handshake (PROGRAMBT9000U + XOR) vergelijken met RT-920-protocol.
-- Maximale lengte zonenaam (slot 16 bytes, driver schrijft max 10).
 - Firmware-/indelingsdetectie (960 vs 990) toevoegen vóór schrijven.
 - Reactie maintainers op voorstel in #12180 afwachten.

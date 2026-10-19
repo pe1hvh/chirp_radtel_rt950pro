@@ -46,7 +46,7 @@
 <path d="M1067.3,507.0 h28 v34.0 h-26" fill="none" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>
 <text x="1103.3" y="519.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">_WRITE_PLAN order: channels, VFO, function,</text>
 <text x="1103.3" y="534.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal">DTMF, mod. params, mod. names, zone names, APRS</text>
-<text x="878.7" y="569.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">segments, data (258-269 blocks)</text>
+<text x="878.7" y="569.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#6B7280" text-anchor="middle" font-weight="normal">segments, data (257-268 blocks)</text>
 <line x1="1067.3" y1="575.0" x2="690.1" y2="575.0" stroke="#6B7280" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#open)"/>
 <text x="1063.9" y="601.0" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="11.5" fill="#1F2937" text-anchor="middle" font-weight="normal">write_clone(data, segments=...)</text>
 <line x1="690.1" y1="607.0" x2="1437.6" y2="607.0" stroke="#1F2937" stroke-width="1.3" marker-end="url(#solid)"/>

@@ -14,6 +14,7 @@ support for the radio's **10 zones × 99 channels**, including zone names.
 |---|---|---|
 | 990 channels (10 zones × 99) | ✅ | ✅ |
 | Zone names | ✅ | ✅ |
+| Tones: CTCSS, DCS normal and inverted, CHIRP `Cross` | ✅ | ✅ |
 | VFO, function, DTMF, modulation settings | ✅ | ✅ |
 | APRS settings | ✅ | ✅ |
 
@@ -30,7 +31,7 @@ block is only written when you change an APRS setting.
 
 Each zone is its own memory tab, named after the zone, with channels 1–99:
 `Memories (1 VHF-LOCAL)`, `Memories (2 UHF-LOCAL)`, … Zone names are edited
-under **Settings → Zone Names** (max. 10 characters).
+under **Settings → Zone Names** (max. 12 characters).
 
 CHIRP places this list of tabs on the right. `tools/chirp_list_left.py` can
 move it to the left, but it modifies your CHIRP installation (see the script).
@@ -93,6 +94,7 @@ scan the driver directory; use option 1 there.
 - `0x7800–0x7BFF` (channels 961–990) is only written when one of those
   channels changed; nothing past `0x7BFF` is ever written. Another project
   reports calibration-like data in this area on some units.
+- `0x9080–0x90FF`, whose meaning is unknown, is never written.
 - The APRS block is only written when an APRS setting changed.
 - A failed write names the command and address, e.g.
   `No ACK for write cmd 0x57 address 0xC000`.
@@ -148,6 +150,7 @@ python docs/build.py        # HTML in ./site
 | `docs/templates/` | pdoc template: menu, locks, layer headings |
 | `.github/workflows/docs.yml` | builds and publishes the API documentation |
 | `tools/find_zone_names.py` | read-only scan of the radio for known text |
+| `tools/raw_dump.py` | read-only dump of the radio's clone image, XOR-decoded but not re-encoded |
 | `tools/make_sample_image.py` | sample `.img` with two invented zones |
 | `tools/chirp_list_left.py` | optional CHIRP patch: zone list on the left |
 | `tools/seqsvg.py` | renders sequence diagrams as SVG (used by `make_diagrams.py`) |
