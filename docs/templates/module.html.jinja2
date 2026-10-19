@@ -9,6 +9,8 @@
       layer_chapters  layer number -> [(anchor, label)] of the design
                       chapters about that layer (see layer_chapters())
       api_anchor      anchor of the "API reference" heading
+      version         the driver's __version__ ("" when absent), shown
+                      after the module name in the page heading
 
     Page order: module docstring, documents, API reference (layers).
 
@@ -134,6 +136,12 @@
             </ul>
         {% endif %}
     {% endfor %}
+{% endmacro %}
+
+{#- Page heading: module name followed by the driver version, e.g.
+    "radtel_rt950pro (v<version>)". Replaces pdoc's default module_name(). -#}
+{% macro module_name() %}
+    <h1 class="modulename">{{ module.modulename }}{% if version %} <span class="version">(v{{ version }})</span>{% endif %}</h1>
 {% endmacro %}
 
 {% block nav_members %}
@@ -326,6 +334,7 @@
         main .parthead h1 { margin: 0; }
         main .parthead p { margin: .2rem 0 0; color: var(--muted); }
         main .layerhead .design-link { font-size: .85em; }
+        main h1.modulename .version { font-weight: 400; color: var(--muted); font-size: .7em; }
     </style>
 {% endblock %}
 
