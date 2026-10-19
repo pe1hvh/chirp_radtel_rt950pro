@@ -17,7 +17,7 @@ Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @2
 - Opgeloste latente fout: `get_logger` bestond niet (NameError bij transport zonder logger).
 - CHIRP's eigen stijlcheck (tools/cpep8.py, pep8/flake8) gebruikt 79 tekens; voor een PR nog herformatteren.
 
-## Op de echte radio bevestigd (Hans)
+## Op de echte radio bevestigd (PE1HVH)
 | Adres / cmd | Inhoud | Lezen | Schrijven |
 |---|---|---|---|
 | 0x52/0x57 0x0000–0x7BBF | 990 kanalen x 32 bytes = 10 zones x 99 (zone n kanaal k = plek (n-1)*99+k) | ok | ok |
@@ -26,7 +26,7 @@ Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @2
 | 0x54/0x58 0x0000 | APRS (128 bytes) | ok | ok met 0x58 (geschreven en teruggelezen); 0x55 geeft GEEN ACK |
 
 0xC800 (zonenamen bij de RT-920) is NIET het adres bij de RT-950 Pro.
-Op Hans' radio is 0x7800–0x7FFF volledig 0xFF (lege kanalen 961–990).
+Op de radio van PE1HVH is 0x7800–0x7FFF volledig 0xFF (lege kanalen 961–990).
 DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit "I", niet CHIRP's "R").
 
 ## Uit de CPS-changelog (RT-950PRO_CPS, primaire bron: startmelding CPS v1.3.3)
@@ -37,7 +37,7 @@ DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit 
 
 ## Uit andere bronnen
 - NeonPlug (infamy/NeonPlug PR #197, gemerged 10-10-2026): eerste melding APRS-write 0x58; ACK-wachttijd tot 30 s.
-- NeonPlug: 0x7800–0x7FFF en ≥0xE000 nooit schrijven — bij één eigenaar calibratie-achtige data (waarschijnlijk 960-kanaal-firmware). Niet door Hans geverifieerd.
+- NeonPlug: 0x7800–0x7FFF en ≥0xE000 nooit schrijven — bij één eigenaar calibratie-achtige data (waarschijnlijk 960-kanaal-firmware). Niet door PE1HVH geverifieerd.
 - Fork Dadud/Chirp_Radtel-RT-950-Pro (Kyle Brockman, dec 2025): CHANNEL_COUNT 990 maar leest nog 0x0000–0x7800 → indeling inconsistent; geen zones; APRS nog 0x55.
 - CHIRP issue #12180: open (status New), geen driver gemerged; FW 0.24 (251201) hoort bij de overgang naar 10 x 99.
 
