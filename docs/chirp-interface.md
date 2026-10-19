@@ -9,7 +9,7 @@ in [`memory-map.md`](memory-map.md) and the wire protocol in
 
 | | |
 |---|---|
-| Driver | `radtel_rt950pro.py`, version 0.1.2 (2026-10-18) |
+| Driver | `radtel_rt950pro.py`, version 0.1.5 (2026-10-19) |
 | CHIRP reference | `kk7ds/chirp` at commit `0a9be8e` (2026-10-17), wxPython UI (`chirp/wxui`) |
 | Radio | Radtel RT-950 Pro, firmware 0.29 (10 zones × 99 channels) |
 
@@ -78,7 +78,8 @@ The directory id built by CHIRP (`radio_class_id`) is `Radtel_RT-950_Pro`.
 | `has_name`, `valid_name_length` | `True`, 12 | same |
 | `valid_characters` | `chirp_common.CHARSET_ASCII` | same |
 | `valid_modes` | `FM`, `NFM`, `AM` | same |
-| `valid_tmodes` | `""`, `Tone`, `TSQL`, `DTCS` | same |
+| `valid_tmodes` | `""`, `Tone`, `TSQL`, `DTCS`, `Cross` | same |
+| `has_cross`, `valid_cross_modes` | `True`, `chirp_common.CROSS_MODES` | same |
 | `valid_duplexes` | `""`, `+`, `-`, `split` (`can_odd_split`) | same |
 | `valid_dtcs_pols` | `NN`, `NR`, `RN`, `RR` | same |
 | `valid_dtcs_codes` | `chirp_common.DTCS_CODES` | same |
@@ -313,7 +314,7 @@ byte (§9).
 | `name` | `name`, stripped (encoded later as GB2312, max. 12 bytes) |
 | `tx_tone`, `rx_tone` | see §8.3 |
 | `scrambler` | `extra['scrambler']`, 0–8, otherwise 0 |
-| `encryption` | `extra['encryption']`, 0–2, otherwise 0 |
+| `encryption` | `extra['encryption']`, 0–3, otherwise 0 |
 | `learn_fhss`, `fhss_code` | always cleared |
 | `rx_modulation`, `bandwidth` | 118–137 MHz: AM, wide, `tx_enabled = False`; 18–64 MHz: FM, narrow for `NFM`; otherwise AM/wide for `AM`, FM narrow/wide for `NFM`/`FM` |
 | `power` | CHIRP label Low/Medium/High; unknown label leaves it unchanged |
@@ -323,34 +324,35 @@ byte (§9).
 
 ### 8.3 Tones
 
-Radio → CHIRP (`_apply_tones`):
+Both directions use CHIRP's own helpers, so every CHIRP tone mode
+including `Cross` is supported (`has_cross = True`, `valid_cross_modes` =
+`chirp_common.CROSS_MODES`).
+
+Radio → CHIRP (`_apply_tones`): each radio tone becomes a CHIRP tone spec
+(`_tone_to_chirp`) and `chirp_common.split_tone_decode` picks the mode:
 
 | TX tone | RX tone | CHIRP result |
 |---|---|---|
 | off | off | `tmode = ""` |
 | CTCSS | off | `Tone`, `rtone` = TX |
-| CTCSS | CTCSS | `TSQL`, `rtone` = `ctone` = TX tone |
-| DCS | DCS | `DTCS`, `dtcs` = TX, `rx_dtcs` = RX, polarity TX + RX |
-| DCS | other | `DTCS`, both codes = TX, polarity TX + `N` |
-| off / CTCSS | DCS | `DTCS`, both codes = RX, polarity `N` + RX |
-| off | CTCSS | `tmode = ""` |
+| CTCSS | same CTCSS | `TSQL`, `ctone` = TX tone |
+| DCS | same DCS code | `DTCS`, `dtcs` = the code (`rx_dtcs` stays 023), polarity TX + RX |
+| any other combination | | `Cross` with the matching `cross_mode`, e.g. `->Tone` (RX tone only), `DTCS->` (TX DCS only), `Tone->Tone` (two different CTCSS tones), `DTCS->Tone`, `Tone->DTCS`, `DTCS->DTCS` (two different codes) |
 
-`dtcs` and `rx_dtcs` are always set to a valid code (023) first, because
-CHIRP's CSV export checks them even when `tmode` is not `DTCS`.
+The radio's inverted DCS polarity `I` is given to CHIRP as reverse `R`;
+normal stays `N`. `dtcs` and `rx_dtcs` are set to a valid code (023) and
+the polarity to `NN` first, because CHIRP's CSV export checks them even
+when `tmode` is not `DTCS`.
 
-CHIRP → radio (`_update_tones_from_memory`):
+CHIRP → radio (`_update_tones_from_memory`): `chirp_common.split_tone_encode`
+gives a TX and an RX tone spec for every mode, including `Cross`; each spec
+becomes a radio tone (`_tone_from_chirp`). CHIRP's `R` is stored as the
+radio's `I`. A DCS code of 0 is stored as no tone. The CHIRP memory is not
+modified.
 
-| `tmode` | TX tone | RX tone |
-|---|---|---|
-| `""` | off | off |
-| `Tone` | CTCSS `rtone` | off |
-| `TSQL` | CTCSS `rtone` (or `ctone`) | CTCSS `ctone` (or `rtone`) |
-| `DTCS` | DCS `dtcs`, first polarity letter | DCS `rx_dtcs` (or `dtcs`), second letter |
-
-A `DTCS` memory with code 0 is treated as no tone. CHIRP's `Cross` mode is
-not offered, so mixed CTCSS/DCS and RX-only tones cannot be expressed; the
-radio's inverted DCS polarity is `I` while CHIRP uses `R` (known issues 2
-and 3 in [`status.md`](status.md)).
+In CHIRP's memory grid, choosing `Cross` as Tone Mode opens a dialog that
+asks for the cross mode; in the memory's *Properties* dialog all tone
+fields can be set at once.
 
 ---
 
@@ -391,12 +393,12 @@ except Zone Names, which is always present:
 
 | Group | Builder | Content |
 |---|---|---|
-| VFO Profiles | `_build_vfo_group` | per VFO A/B/C: RX frequency, offset direction, offset, TX power, bandwidth, RX modulation, busy lockout, learn FHSS, scrambler, encryption, step, frequency band, signalling group |
+| VFO Profiles | `_build_vfo_group` | per VFO (VFO-A to VFO-C) the fields of the CPS *VFO Mode* screen, with its labels, choices and order: Rx Freq, Rx QT/DQT, Tx QT/DQT, Busy Lockout, Offset Dir, Signalling, Tx Power, Scramble, Bandwidth, Encryption, RxModulation, Freq Band (read-only), Step Freq, Offset Freq |
 | Broadcast/Modulation | `_build_modulation_group` | current FM/AM/SSB channel, work mode, modulation mode, AM/SSB step and RX gain; FM, AM and SSB memories (frequency, name; SSB also bandwidth and beat offset) |
 | Function Settings | `_build_function_group` | the 26 keys of `_FUNCTION_UI` (squelch, VOX, time-out, beeps, display modes, …) |
 | APRS Settings | `_build_aprs_group` | the 11 keys of `_APRS_UI` (enable, GPS, callsign, SSID, priority, custom message, …) |
 | DTMF Settings | `_build_dtmf_group` | own ID, PTT ID mode, code groups 1–5 (of 22) |
-| Zone Names | `_build_zone_group` | ten strings, max. 10 ASCII characters |
+| Zone Names | `_build_zone_group` | ten strings, max. 12 ASCII characters |
 
 Every `RadioSetting` gets an **apply callback** bound to the object it
 changes (a `VFOSettings` entry, the `FunctionSettings`, `APRSSettings`,
@@ -405,8 +407,12 @@ changes (a `VFOSettings` entry, the `FunctionSettings`, `APRSSettings`,
 When the user changes a value, CHIRP puts the new value into its settings
 tree, makes a `copy.deepcopy()` of the tree, removes immutable and
 uninitialised settings, and calls `set_settings(copy)`. The driver walks the
-tree and runs **every** apply callback, not only the changed one. The
-callbacks still update the driver's own objects: CHIRP stores the callback
+tree and runs the apply callback only of settings whose `changed()` is
+`True`; CHIRP marks a setting as changed once its value has been set in this
+editor session, and the mark stays until CHIRP rebuilds the settings tab
+with `get_settings()` (for example when the image is reopened). A setting
+object without `changed()` always has its callback run. The callbacks still
+update the driver's own objects: CHIRP stores the callback
 as a closure (`lambda: callback(self, *args)`), and `deepcopy` keeps
 functions by reference, so the closure still refers to the original setting
 and section objects. The callbacks validate through the settings API
@@ -425,9 +431,13 @@ CHIRP shows any exception from `set_settings()` as an error dialog. Because
 the callbacks run in tree order, an exception also stops the callbacks after
 it. If all succeed, the memory cache is cleared.
 
-Because all callbacks run on every apply, a callback that does not
-round-trip its own value changes data without a user edit (known issues 1
-and 4 in [`status.md`](status.md)).
+Because only changed settings are applied, opening the *Settings* tab and
+applying an edit of one setting leaves all other settings as they were read.
+The list callbacks (VFO, modulation) also store a value only when the chosen
+label is one of the offered choices, so a stored value shown as
+`Unknown (<value>)` is kept. Two VFO values are not shown as unknown: a
+power nibble above 2 is read as Low, and a tone with a DCS index the driver
+does not know is shown as OFF.
 
 A renamed zone gets its new tab title only when the sub-devices are created
 again, i.e. after the image is reopened.
@@ -453,9 +463,11 @@ came from a download, or from a file that already had it) and one entry per
 zone `VARIANT` with that zone's `mem_extra` comments.
 
 `to_bytes()` writes unedited channel records and VFO entries back
-byte-identical and keeps `0x7BC0–0x7FFF` and unknown bytes. Some settings
-encoders normalise bytes without an edit (known issues 7 and 10 in
-[`status.md`](status.md)).
+byte-identical and keeps `0x7BC0–0x7FFF` and unknown bytes. The modulation
+and APRS encoders compare each field with the bytes that were read and write
+only the fields that were edited, so an unedited image is saved
+byte-identical. An edited channel record keeps the high nibbles of bytes 12
+and 13, which the driver does not use.
 
 ---
 
@@ -468,9 +480,8 @@ that is open in the editor and runs `sync_out()` in a `CloneThread`.
 
 1. `sync_out()` refuses to start without a port or an image
    (`RadioError`).
-2. It builds the complete payload. A record that cannot be encoded (for
-   example a DCS code with CHIRP polarity `R`) raises `ValueError` here,
-   **before** anything is sent.
+2. It builds the complete payload. A record that cannot be encoded
+   raises `ValueError` here, **before** anything is sent.
 3. `_write_options()` decides the optional parts:
 
    | Option | Rule |
@@ -481,8 +492,10 @@ that is open in the editor and runs `sync_out()` in a `CloneThread`.
 
 4. `_build_write_plan()` cuts the payload into segments in `_WRITE_PLAN`
    order: channels, VFO, function, DTMF, modulation parameters, modulation
-   names, zone names, APRS last. That is 258 blocks minimum (no zone names,
-   no APRS), 260 typically, 269 maximum.
+   names, zone names, APRS last. Of the function segment only
+   `0x9000–0x907F` is written (one block); `0x9080–0x90FF` is left to the
+   radio, see [`memory-map.md`](memory-map.md). That is 257 blocks minimum
+   (no zone names, no APRS), 259 typically, 268 maximum.
 
    ![Write plan](diagrams/fto-write-plan.svg)
 
@@ -500,7 +513,7 @@ that is open in the editor and runs `sync_out()` in a `CloneThread`.
 7. On success CHIRP's memory map is replaced by the payload that was built
    in step 2.
 
-Never written: `0x7C00–0x7FFF` and anything from `0xE000`.
+Never written: `0x7C00–0x7FFF`, `0x9080–0x90FF` and anything from `0xE000`.
 
 ---
 
@@ -515,7 +528,7 @@ Never written: `0x7C00–0x7FFF` and anything from `0xE000`.
 | Image cannot be parsed | `ValueError` → `RadioError('Failed to parse memory map: …')` | open fails |
 | Memory number out of range | `RadioError` | row error |
 | Setting value rejected | `SettingsError` etc., mostly wrapped in `RadioError` (§10) | error dialog in the settings tab |
-| Record cannot be encoded (e.g. DCS `R`) | `ValueError` | save / upload fails before sending |
+| Record cannot be encoded (e.g. an unsupported CTCSS tone) | `ValueError` | save / upload fails before sending |
 
 Loggers are named after the module: `chirp.drivers.radtel_rt950pro` when
 copied into the driver directory, `chirp.loaded.<file name>` when loaded as a
@@ -585,7 +598,7 @@ Found while tracing the interface; not in the known-issues list of
 
 ## Sources
 
-* Driver: `radtel_rt950pro.py` 0.1.2, `docs/memory-map.md`, `docs/protocol.md`, `docs/status.md`.
+* Driver: `radtel_rt950pro.py` 0.1.5, `docs/memory-map.md`, `docs/protocol.md`, `docs/status.md`.
 * CHIRP: [kk7ds/chirp](https://github.com/kk7ds/chirp) at commit `0a9be8e` —
   `chirp/chirp_common.py` (`CloneModeRadio`, `ExternalMemoryProperties`,
   `Radio.erase_memory`), `chirp/directory.py` (`register`,

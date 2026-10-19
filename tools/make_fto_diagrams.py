@@ -366,7 +366,7 @@ def write_plan() -> str:
         ("ch. 961-990", "0x7800", 0x3C0, "only if changed", "#FDE2B8"),
         ("unused", "0x7BC0", 0x440, "0x7BC0-0x7BFF only\nwith 961-990; rest never", "#E5E7EB"),
         ("VFO", "0x8000", 0x100, "always", "#CFE2F7"),
-        ("function", "0x9000", 0x100, "always", "#CFE2F7"),
+        ("function", "0x9000", 0x100, "0x9000-0x907F\nalways", "#CFE2F7"),
         ("DTMF", "0xA000", 0x200, "always", "#CFE2F7"),
         ("mod. params", "0xB000", 0x200, "always", "#CFE2F7"),
         ("mod. names", "0xD000", 0x300, "always", "#CFE2F7"),
@@ -407,7 +407,7 @@ def write_plan() -> str:
                    12, color=MUTED))
     order = [("1  channels 0x0000-0x77FF (240 blocks)\n    or 0x0000-0x7BFF (248 blocks)",
               "#CFE2F7"),
-             ("2  VFO 0x8000 (2)", "#CFE2F7"), ("3  function 0x9000 (2)", "#CFE2F7"),
+             ("2  VFO 0x8000 (2)", "#CFE2F7"), ("3  function 0x9000 (1)", "#CFE2F7"),
              ("4  DTMF 0xA000 (4)", "#CFE2F7"), ("5  mod. params 0xB000 (4)", "#CFE2F7"),
              ("6  mod. names 0xD000 (6)", "#CFE2F7"),
              ("7  zone names 0xC000 (2), if valid", "#D7F0DD"),
@@ -430,10 +430,10 @@ def write_plan() -> str:
                      f'y2="{row_y + 15}" stroke="{INK}" stroke-width="1.2" '
                      f'marker-end="url(#arr)"/>')
         x += w + 32
-    s.append(_text(30, row_y + 80, "Total: 258 blocks minimum (no zone names, no APRS) to 269 "
+    s.append(_text(30, row_y + 80, "Total: 257 blocks minimum (no zone names, no APRS) to 268 "
                    "maximum. Every block: header 0x57/0x58, addr_hi, addr_lo, 0x80 + 128 "
                    "XOR-ed bytes; radio answers 0x06.", 11.5, color=MUTED))
-    s.append(_text(30, row_y + 100, "Never written: 0x7C00-0x7FFF, anything from 0xE000. "
+    s.append(_text(30, row_y + 100, "Never written: 0x7C00-0x7FFF, 0x9080-0x90FF, anything from 0xE000. "
                    "Legacy 960-slot images never write 0x7800-0x7BFF.", 11.5, color=MUTED))
     s.append("</svg>")
     return "\n".join(s) + "\n"

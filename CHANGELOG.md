@@ -1,5 +1,99 @@
 # Changelog
 
+## 0.1.5 — 2026-10-19
+
+Bug fixes from tests on a real radio with the original CPS (V1.3.3,
+firmware 0.29): values were set in the CPS, written to the radio and read
+back raw, so every value below is the radio's own encoding. Also fixes the
+known bugs listed in `docs/status.md`, except the unused `_ToneInfo`.
+Uploads from CHIRP were checked the same way: only the edited bytes change.
+
+### Added
+- `tools/raw_dump.py`: reads the radio and saves the clone image as read
+  (XOR-decoded, otherwise unchanged; read-only). Uses only the transport
+  layer, so unlike a `.img` saved by CHIRP the bytes have not passed through
+  the driver's encoders. Comparing both files from the same radio state shows
+  which bytes the driver changes without an edit.
+- `tests/test_radio_values.py`: regression tests for the values measured on
+  the radio (neutral, invented frequencies).
+- `tests/test_known_issues.py`: tests for the known issues fixed in this
+  release.
+- CHIRP `Cross` tone mode with all of CHIRP's cross modes. A channel with
+  an RX tone only, a TX DCS only, two different CTCSS tones, two different
+  DCS codes or mixed CTCSS/DCS is shown as `Cross` and written back unchanged. In the
+  memory grid CHIRP asks for the cross mode after `Cross` is chosen; the
+  memory's *Properties* dialog sets all tone fields at once.
+- `docs/memory-map.md`: VFO record table, the global modulation parameters
+  and a note on `0x9080–0x90FF`.
+
+### Changed
+- VFO settings now show the fields of the CPS *VFO Mode* screen, with its
+  labels, choices and order: Rx Freq, Rx QT/DQT, Tx QT/DQT, Busy Lockout,
+  Offset Dir, Signalling, Tx Power, Scramble, Bandwidth, Encryption,
+  RxModulation, Freq Band, Step Freq, Offset Freq. The groups are named
+  VFO-A to VFO-C. Rx and Tx QT/DQT are new in the settings.
+- Learn FHSS and the offset direction "Split" are no longer shown for the
+  VFOs (the CPS does not offer them); their stored values are kept.
+- A stored VFO value the CPS does not offer is shown as `Unknown (<value>)`
+  and is left unchanged when settings are applied. Exceptions: Tx Power
+  above Low is read as Low, and an unknown DCS index (see Known issues).
+- Freq Band is read-only (VHF/UHF), as in the CPS, and follows Rx Freq when
+  that is edited: VHF below 300 MHz, UHF from 300 MHz (boundary measured
+  with the CPS).
+- Broadcast/Modulation settings use the CPS labels and lists: Work Mode
+  (VFO Mode, CH Mode), Modulation Mode (FM, AM, LSB, USB, CW), AM and SSB
+  Step Freq, AM and SSB Rx Gain (AGC, 0dB, −1dB to −35dB). A value that is
+  not set is shown as `Not set` and kept. Current channels are 0-14.
+- Settings apply runs only the callbacks of settings that were changed.
+- Of the function segment only `0x9000–0x907F` is written; `0x9080–0x90FF`,
+  whose meaning is unknown and which the radio changes, is left to the
+  radio. An upload is one block shorter.
+- Busy Lockout is an OFF/ON list instead of a checkbox, and Bandwidth lists
+  Wide first, as in the CPS.
+
+### Fixed
+- VFO power was always read as High. Changing any other setting then wrote
+  High back, so a Low or Middle VFO became High.
+- VFO step: only 6 of the radio's 10 steps were known and from 8.33 kHz on
+  the labels were wrong. Applying settings changed a VFO on 20, 25, 50 or
+  100 kHz to 2.5 kHz. Now 2.5, 5.0, 6.25, 8.33, 10.0, 12.5, 20.0, 25.0, 50.0
+  and 100.0 kHz (stored 0-9).
+- VFO band was set to 0 on every settings apply; the radio stores 0 VHF and
+  1 UHF.
+- VFO Signalling showed the stored value (0-15); the CPS shows it plus one
+  and the radio stores 0-14. Now 1-15 as in the CPS.
+- VFO Scramble offered 0-9; the radio knows OFF and 1-8.
+- Channel encryption 3 was reset to 0 when a channel was edited; the radio
+  knows 0-3.
+- Ranges of settings without a CHIRP field, as the CPS lists them: PF1
+  Short/Long 0-7, PF2 Short/Long 0-6 (were 0-31), Timed Beacon Time 0-9
+  (was 0-60), Radio Symbol 0-4 (was 0-99).
+- Zone names of more than 10 characters failed to load in the settings
+  ("must be between 0 and 10 chars") and the field was left out. The CPS and
+  the radio use up to 12 characters; the driver now does too. A longer
+  name written by other software (the slot holds 16 bytes) also loads and
+  is kept unless it is edited.
+- DCS polarity: the radio's inverted DCS (`I`) is shown as CHIRP's reverse
+  polarity `R` and `R` is written as `I`. Before, an inverted DCS channel
+  showed an invalid polarity and `R` could not be saved.
+- RX-only tones and mixed CTCSS/DCS were lost when such a channel was
+  edited (now CHIRP `Cross`, see Added).
+- Applying settings turned values that were not set (`0xFF`) into defaults,
+  for example after merely opening the settings and applying one edit.
+- Unset modulation fields (`0xFF`) were written as `0x00` on every upload;
+  the modulation and APRS encoders now write only edited fields, so unusual
+  stored bytes are kept.
+- An edited channel record lost the high nibbles of bytes 12 and 13.
+- `set_memory` modified CHIRP's frozen memory object for a DTCS memory with
+  TX code 0.
+- A modulation channel name or APRS custom message in GB2312 could be cut
+  inside a two-byte character.
+- A negative DTMF code group index was accepted.
+
+### Known issues
+- A VFO tone with a DCS index the driver does not know is shown as OFF;
+  choosing OFF then does not clear it.
+
 ## 0.1.4 — 2026-10-19
 
 ### Added
