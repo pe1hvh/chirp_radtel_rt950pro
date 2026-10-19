@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-10-19
 
 Documentation only. The driver's code is unchanged.
 
@@ -30,6 +30,11 @@ Documentation only. The driver's code is unchanged.
   copies `docs/diagrams` next to the page (click opens full size), stops on
   a broken link between documents, and links each API layer heading to its
   design chapter.
+- Diagram generators in `tools/`: `seqsvg.py` (renders sequence diagrams as
+  SVG), `make_diagrams.py` (the nine sequence diagrams) and
+  `make_fto_diagrams.py` (the three structure diagrams). They regenerate all
+  12 files in `docs/diagrams` byte-identical; `docs/fto.md` B13 describes how
+  to run them. Standard library only.
 
 ### Changed
 - README: repository layout lists the new documents; the documentation
@@ -40,6 +45,16 @@ Documentation only. The driver's code is unchanged.
   develop) per build, so links from the documents to GitHub point to the
   branch that was built. An environment variable instead of `--branch`, so
   the older `build.py` on main ignores it until develop is merged.
+- Workflow `.github/workflows/docs.yml`: the docstring check also runs
+  pylint's missing-docstring checks with no exemption for names starting
+  with `_`. pydocstyle only checks the names in `__all__`, so a private (or
+  unlisted) class, function or method without a docstring passed unnoticed.
+  Nested functions are still not checked. README and `docs/fto.md` B13
+  describe the check.
+
+### Fixed
+- `docs/memory-map.md`: the channel name is GB2312, not ASCII, as in the
+  code (`ChannelRecord`, `_encode_name`).
 
 ### Known issues (found while checking the page, not fixed)
 - Already in 0.1.2: pdoc gives docstring section headings the same `id` on

@@ -476,9 +476,31 @@ Tools: `tools/make_sample_image.py` (sample `.img`),
    lock) next to public ones (open lock).
 
 The GitHub Action `.github/workflows/docs.yml` checks the driver's
-docstrings with pydocstyle and pydoclint, then builds `main` into the site
-root and `develop` into `/develop/` and publishes both to GitHub Pages on
-every push to either branch.
+docstrings with pydocstyle, pylint and pydoclint, then builds `main` into the
+site root and `develop` into `/develop/` and publishes both to GitHub Pages on
+every push to either branch. pydocstyle only checks the names in `__all__`;
+pylint's missing-docstring checks (with no exemption for names starting with
+`_`) cover every other module-level class, function and method. Nested
+functions are checked by neither.
+
+**Diagrams.** The SVG files in `docs/diagrams` are generated, not drawn by
+hand:
+
+| Script | Writes |
+|---|---|
+| `tools/make_diagrams.py` | the sequence diagrams `seq-01` to `seq-09`, one function per diagram, rendered with `tools/seqsvg.py` |
+| `tools/make_fto_diagrams.py` | the structure diagrams `fto-layers`, `fto-classes` and `fto-write-plan` |
+
+After changing a diagram, run both from the repository root and check the
+result in a browser (text widths are estimated, positions are fixed):
+
+```
+python3 tools/make_diagrams.py
+python3 tools/make_fto_diagrams.py
+```
+
+Both write to `docs/diagrams` by default, or to the directory given as the
+first argument. Only the standard library is needed.
 
 ### B14. Known issues and observations
 

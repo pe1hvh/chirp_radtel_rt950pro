@@ -38,7 +38,7 @@ edited, and never writes past `0x7BFF`.
 | 14 | 1 | Scrambler (high nibble), power (low nibble) |
 | 15 | 1 | Flags: b7 learn FHSS, b6 narrow, b5-4 encryption, b3 busy lockout, b2 scan add, b1 TX enable, b0 AM |
 | 16 | 4 | FHSS code |
-| 20 | 12 | Name (ASCII, `0xFF` padded) |
+| 20 | 12 | Name (GB2312, `0xFF` padded) |
 
 Empty slot: RX frequency is `0xFF`.
 
