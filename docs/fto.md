@@ -10,8 +10,8 @@ reference in [`memory-map.md`](memory-map.md) and
 
 | | |
 |---|---|
-| Program | `radtel_rt950pro.py` (single file, 6,752 lines) |
-| Version | 0.1.2 (2026-10-18) |
+| Program | `radtel_rt950pro.py` (single file, 6,653 lines) |
+| Version | 0.1.5 (2026-10-19) |
 | Radio | Radtel RT-950 Pro, firmware 0.24 and later (tested on 0.29) |
 | Reference CPS | RT-950PRO_CPS v1.3.3 |
 | Licence | MIT; © 2025 Nathan G. Barguss (2E0NBS), © 2026 PE1HVH |
@@ -45,7 +45,7 @@ shown as its own memory tab in CHIRP.
 | F-02 | Upload the edited memory to the radio, with progress per block | – | ✅ | `sync_out` |
 | F-03 | 990 channels shown as 10 zone tabs of 99 channels, tab titled with the zone name | ✅ | ✅ | `RT950ProZoneRadio` |
 | F-04 | Channel fields: RX/TX frequency (simplex, ±offset, split), name (12 bytes), CTCSS/DCS, power (3 levels), FM/NFM/AM, scan skip, scrambler, encryption | ✅ | ✅ | `_channel_to_memory`, `_apply_memory_to_channel` |
-| F-05 | Zone names (10, max. 10 ASCII characters) | ✅ | ✅ | `_build_zone_group`, `encode_zone_names` |
+| F-05 | Zone names (10, max. 12 ASCII characters) | ✅ | ✅ | `_build_zone_group`, `encode_zone_names` |
 | F-06 | VFO A/B/C settings | ✅ | ✅ | `_build_vfo_group` |
 | F-07 | Function settings (26 shown, 57 known) | ✅ | ✅ | `_build_function_group` |
 | F-08 | DTMF: own ID, PTT ID mode, code groups 1–5 (of 22) | ✅ | ✅ | `_build_dtmf_group` |
@@ -64,7 +64,7 @@ limit what is written.
 | S-01 | Only data that was read from the radio is written back; unknown bytes are preserved. |
 | S-02 | An unedited channel record or VFO entry is written back byte-identical. |
 | S-03 | Channels 961–990 (`0x7800–0x7BFF`) are written only when one of them changed, and never for an image of the old 960-slot driver. |
-| S-04 | `0x7C00–0x7FFF` and anything from `0xE000` are never written. |
+| S-04 | `0x7C00–0x7FFF`, `0x9080–0x90FF` and anything from `0xE000` are never written. |
 | S-05 | Zone names are written only when they were read from `0xC000` (image layout version 4 or later). |
 | S-06 | The APRS block is written only when it changed, and as the last block. |
 | S-07 | A record that cannot be encoded stops the upload before any byte is sent. |
@@ -77,7 +77,7 @@ limit what is written.
 * Settings added in CPS 1.3.x (offsets unknown).
 * Function settings not in `_FUNCTION_UI`, APRS settings not in `_APRS_UI`,
   DTMF code groups 6–22: kept, not editable.
-* CHIRP `Cross` tone mode, banks, live mode, radio detection.
+* Banks, live mode, radio detection.
 * Calibration data.
 
 ---
@@ -130,9 +130,10 @@ underscore is internal.
    bytes become the reference.
 3. **Read-modify-write for settings.** Section encoders start from the
    stored bytes (`RadioImage.remainder`) and replace only the bits of known
-   fields. Two deviations are documented in the code: a field byte holding
-   `0xFF` is treated as 0 before its bits are merged, and some encoders
-   normalise bytes without an edit (known issues 7 and 10).
+   fields. The modulation and APRS encoders write a field only when its
+   value differs from what was read, so an unedited block stays
+   byte-identical. One deviation is documented in the code: a field byte
+   holding `0xFF` is treated as 0 before its bits are merged.
 4. **Write less than you read.** The write plan is a filtered, re-ordered
    subset of the read layout (§B8).
 5. **Fail before sending.** The complete payload is built before the serial
@@ -198,7 +199,7 @@ character. Every alteration is logged.
 | DTMF | `DTMFSettings` | ID (5), PTT ID mode, two timing values, 22 code groups (6 symbols) | symbols `0-9 A-D * #`, `0xFF` terminates |
 | Modulation | `ModulationSettings` + 16 × `ModulationChannelEntry` | global values + FM/AM/SSB memories | frequencies in 10 kHz units; names in a separate block |
 | APRS | `APRSSettings.fields` | `dict[key → int, str or None]` | 39 keys in `_APRS_SPECS`; lat/lon as letter + minute/degree/second; altitude signed 16-bit; custom message at offset 79, 40 bytes |
-| Zone names | `RadioImage.zone_names` | `list[str]` × 10 | read up to 16 bytes, written max. 10, padding byte of the slot kept |
+| Zone names | `RadioImage.zone_names` | `list[str]` × 10 | read up to 16 bytes; an edited name is written max. 12, an unedited one as read; padding byte of the slot kept |
 
 `None` in a section means "byte was `0xFF` (not set)".
 
@@ -208,7 +209,8 @@ character. Every alteration is logged.
   and `_original_state`. A power nibble above 2 decodes as LOW.
 * `ChannelRecord.to_bytes()` returns `_raw_bytes` when the state is
   unchanged. Otherwise it rebuilds the record from `0xFF`: known fields
-  only, bytes 12 and 13 keep only their low nibble, the FHSS field is
+  only, bytes 12 and 13 keep their high nibble (0 when the old byte was
+  `0xFF`), the FHSS field is
   `0xFF × 4` without a code, the name is padded with `0xFF`. The new bytes
   become the reference.
 * `ToneSetting` follows the same pattern for its two bytes, so an unknown
@@ -232,9 +234,9 @@ its dataclass; length errors raise `ValueError`.
 | `encode_vfo_section` | unchanged entries copied verbatim; `rx_hz`/`offset_hz` `None` keep the stored digits; entries beyond the third ignored |
 | `encode_function_section` | value `None` or missing key writes `0xFF` over the whole byte; byte 26 becomes `0xFF` if any work mode is `None` |
 | `encode_dtmf_section` | own ID and code groups rewritten only when their text changed (a rewritten group gets `0xFF` in bytes 6–15); info bytes 6–8 always written to the low nibble |
-| `encode_modulation_sections` | fields rewritten when their encoded bytes differ; names only when the text changed; entries beyond `len(channels)` cleared to `0xFF` |
-| `encode_aprs_section` | fields and texts changed only when the value differs; out-of-range stored values normalised |
-| `encode_zone_names` | unchanged names byte-identical; changed name cut to 10 ASCII characters, padded with the slot's own padding byte (`0x00` or `0xFF`) |
+| `encode_modulation_sections` | each field compared with the value parsed from the stored blocks and written only when it differs; a global field that is `None` (not set) is never written; names only when the text changed; entries beyond `len(channels)` cleared to `0xFF` |
+| `encode_aprs_section` | each field and text compared with the value parsed from the stored block and written only when it differs, so unusual stored bytes (hemisphere letters, position digits, altitude, icon) are kept |
+| `encode_zone_names` | unchanged names byte-identical; changed name cut to 12 ASCII characters, padded with the slot's own padding byte (`0x00` or `0xFF`) |
 
 **Settings API** (layer 3). `SettingSpec(kind, min_value, max_value,
 choices, max_length)` describes one setting; `_validate()` enforces it
@@ -359,10 +361,14 @@ to label, type (`bool`, `int`, `enum`, `string`) and range or choices.
 `_build_setting_value()` turns an entry into the matching CHIRP value object;
 `_create_function_setting` / `_create_aprs_setting` attach
 `_apply_function_setting` / `_apply_aprs_setting` as callback. VFO,
-modulation, DTMF and zone names have hand-written builders: VFO has one
-`_apply_vfo_*` callback per field, modulation uses shared callbacks
-parameterised by attribute name (`_apply_modulation_int` for all nine global
-fields), DTMF has one per kind (ID, mode, group), zone names one
+modulation, DTMF and zone names have hand-written builders: VFO lists use
+one shared builder and callback (`_make_list_setting`, `_apply_list_choice`,
+which leaves a value outside the list unchanged), tones `_apply_vfo_tone`,
+frequencies `_apply_vfo_frequency` (which also sets Freq Band: UHF from
+300 MHz) and `_apply_vfo_offset`; Freq Band is read-only without callback;
+modulation uses `_apply_modulation_int` for the three current channels
+(0–14) and the same list builder for work mode, modulation mode, AM/SSB step
+and AM/SSB Rx Gain, with the CPS labels; DTMF has one per kind (ID, mode, group), zone names one
 (`_apply_zone_name`). Value readers `_value_as_bool`,
 `_value_as_int`, `_value_as_index` (index or label lookup) and
 `_value_as_string` hide the difference between CHIRP's value objects and
@@ -371,16 +377,17 @@ plain values.
 #### B9.6 Write plan
 
 `_WRITE_PLAN` lists `(index into DEFAULT_SEGMENTS, length)` in write order:
-channels (`0x7C00`), VFO, function, DTMF, modulation parameters, modulation
-names, zone names, APRS. `_write_options()` decides three switches;
+channels (`0x7C00`), VFO, function (`0x80`: only `0x9000–0x907F`; the
+meaning of `0x9080–0x90FF` is unknown and the radio changes it), DTMF,
+modulation parameters, modulation names, zone names, APRS. `_write_options()` decides three switches;
 `_build_write_plan(payload, write_zone_names, channel_bytes, write_aprs)`
 applies them:
 
 | Condition | Channels written | Zone names | APRS | Blocks |
 |---|---|---|---|---|
-| nothing optional | `0x0000–0x77FF` | no | no | 258 |
-| typical (fresh download, no APRS edit) | `0x0000–0x77FF` | yes | no | 260 |
-| ch. 961–990 edited, APRS edited | `0x0000–0x7BFF` | yes | yes (`0x58`, last) | 269 |
+| nothing optional | `0x0000–0x77FF` | no | no | 257 |
+| typical (fresh download, no APRS edit) | `0x0000–0x77FF` | yes | no | 259 |
+| ch. 961–990 edited, APRS edited | `0x0000–0x7BFF` | yes | yes (`0x58`, last) | 268 |
 
 #### B9.7 Error mapping
 
@@ -453,9 +460,55 @@ CHIRP_SRC=~/src/chirp python3 -m pytest tests
 | `test_legacy_960_image_never_writes_past_0x7800` | S-03 for legacy images |
 | `test_write_error_names_command_and_address` | S-08, transport message only (the dedicated APRS `RadioError` in `sync_out` is not tested) |
 
+`tests/test_radio_values.py` pins down values measured on a radio with the
+CPS (encodings from the radio, frequencies invented):
+
+| Test | Checks |
+|---|---|
+| `test_vfo_power_decodes_all_three_levels` | VFO power 0/1/2 decodes as High/Middle/Low |
+| `test_settings_apply_without_edit_keeps_vfo_bytes` | a settings apply without an edit leaves the VFO bytes unchanged (S-02) |
+| `test_vfo_screen_follows_cps_labels_and_order` | VFO-A to VFO-C with the CPS fields in CPS order |
+| `test_vfo_screen_shows_measured_values` | every VFO field shows what the CPS showed for the same bytes |
+| `test_vfo_choice_lists_match_cps` | Step Freq, Tx Power, Scramble, Signalling, Offset Dir, Encryption and tone lists |
+| `test_vfo_freq_band_is_read_only` | Freq Band read-only, no callback |
+| `test_vfo_edit_writes_cps_encoding` | edited step, power, signalling and tone stored as the CPS stores them |
+| `test_vfo_value_outside_list_is_left_alone` | a value the CPS does not offer is shown as unknown and kept |
+| `test_channel_encryption_3_is_kept` | channel encryption 3 and scramble 8 |
+| `test_side_key_ranges_match_cps` | PF1 0-7, PF2 0-6 |
+| `test_aprs_ranges_match_cps` | Timed Beacon Time 0-9, Radio Symbol 0-4 |
+| `test_zone_name_of_twelve_characters_loads_and_saves` | 12-character zone names |
+| `test_zone_name_longer_than_twelve_is_shown_and_kept` | a longer name written by other software loads and is kept |
+| `test_vfo_group_builds_with_the_stand_in_classes` | the VFO group also builds without CHIRP |
+| `test_vfo_band_follows_rx_freq` | Freq Band becomes VHF below and UHF from 300 MHz when Rx Freq is edited |
+| `test_modulation_screen_uses_cps_lists` | modulation labels and lists as in the CPS |
+| `test_modulation_edit_and_unset_value` | an edited modulation list is stored; a value that is not set is shown as such and kept |
+| `test_modulation_current_channel_range_matches_decoding` | current channels 0–14 |
+
+`tests/test_known_issues.py` covers the known issues 2–4, 7, 8 and 10 of
+[`status.md`](status.md) (1, 6 and 9 are in `test_radio_values.py`) and three
+smaller fixes of 0.1.5 (GB2312 cut, DTMF index, function segment):
+
+| Test | Checks |
+|---|---|
+| `test_inverted_dcs_reads_as_chirp_reverse_polarity` | radio `I` → CHIRP `R` |
+| `test_chirp_reverse_polarity_is_written_as_inverted` | CHIRP `R` → radio `I` |
+| `test_mixed_tones_are_shown_as_cross_and_written_back` | RX-only and mixed tones as CHIRP `Cross`, written back unchanged (seven cross modes) |
+| `test_features_offer_cross_modes` | `Cross` and CHIRP's cross modes in the features |
+| `test_set_memory_does_not_change_the_callers_memory` | `set_memory` leaves CHIRP's memory unchanged |
+| `test_edited_channel_keeps_high_nibbles_of_bytes_12_and_13` | unused nibbles of an edited channel record kept |
+| `test_settings_apply_writes_only_the_changed_setting` | an apply runs only the callback of the changed setting |
+| `test_unset_modulation_block_is_written_back_unchanged` | an all-`0xFF` modulation block stays `0xFF` |
+| `test_modulation_bandwidth_zero_is_kept` | SSB bandwidth 0 kept |
+| `test_unusual_aprs_bytes_are_written_back_unchanged` | unusual stored APRS bytes kept |
+| `test_gb2312_text_is_not_cut_inside_a_character` | a GB2312 name is cut between characters |
+| `test_negative_dtmf_code_group_index_is_refused` | DTMF code group index below 0 refused |
+| `test_function_segment_write_stops_before_0x9080` | function segment written as one block (S-04) |
+
 Tools: `tools/make_sample_image.py` (sample `.img`),
 `tools/find_zone_names.py` (read-only scan of unread address ranges; found
-`0xC000`), `tools/chirp_list_left.py` (optional CHIRP patch).
+`0xC000`), `tools/raw_dump.py` (read-only dump of the clone image,
+XOR-decoded, without the driver's encoders), `tools/chirp_list_left.py`
+(optional CHIRP patch).
 
 ### B13. Documentation build
 
@@ -504,13 +557,11 @@ first argument. Only the standard library is needed.
 
 ### B14. Known issues and observations
 
-Known issues 1–10 are listed in [`status.md`](status.md) and marked as
-*Warning* in the docstrings; they are not repeated here. In short: VFO band
-reset on apply (1), DCS polarity `I`↔`R` (2), lossy tone combinations without
-`Cross` (3), "not set" becomes a default on apply (4), unused `_ToneInfo`
-(5), VFO power decoded as HIGH (6), modulation `0xFF` → `0x00` (7), frozen
-memory modified via the parent path (8), range/mask mismatches (9), APRS
-normalisation and lost high nibbles of channel bytes 12–13 (10).
+Known issues are listed in [`status.md`](status.md); they are not repeated
+here. Still open:
+unused `_ToneInfo` (5), and a VFO tone with a DCS index the driver does not
+know, which is shown as OFF (choosing OFF then does not clear it). All other
+known issues (1–4 and 6–10) are fixed in 0.1.5, each with a test.
 
 Additional observations from the interface analysis (snapshots not refreshed
 after an upload, comments lost after a zone rename, progress text past
@@ -521,10 +572,11 @@ channel 990, repeated payload builds) are in
 
 From [`status.md`](status.md):
 
-* fix known issues 1–4 and 6–10, each with a test;
+* remove the unused `_ToneInfo` (known issue 5);
+* a VFO tone with a DCS index the driver does not know is shown as OFF;
+* find out what `0x9080–0x90FF` is;
 * detect the firmware layout (960 vs 990 channels) before writing;
 * compare the handshake with CHIRP's RT-920 driver;
-* determine the maximum zone-name length accepted by the radio;
 * await the maintainers' response to the proposal in #12180.
 
 The route to official CHIRP support (subclass of the RT-920 driver, GPLv3,

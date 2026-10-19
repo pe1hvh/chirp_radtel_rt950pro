@@ -296,7 +296,7 @@ def settings() -> Seq:
                 "copy.deepcopy(settings); drop immutable/uninitialised")
     s.msg("se", "drv", "set_settings(copy)")
     s.self_call("drv", "isinstance(settings, RadioSettings); walk()")
-    s.frame("loop", "every RadioSetting with an apply callback", "drv", "img")
+    s.frame("loop", "every changed RadioSetting with an apply callback", "drv", "img")
     s.msg("drv", "bld", "run_apply_callback()")
     s.msg("bld", "img",
           "e.g. set_function_value(), vfo.freq_band = ...,\n"
@@ -439,7 +439,7 @@ def upload() -> Seq:
     s.self_call("plan",
                 "_WRITE_PLAN order: channels, VFO, function,\n"
                 "DTMF, mod. params, mod. names, zone names, APRS")
-    s.ret("plan", "drv", "segments, data (258-269 blocks)")
+    s.ret("plan", "drv", "segments, data (257-268 blocks)")
     s.msg("drv", "tr", "write_clone(data, segments=...)")
     s.msg("tr", "radio", "handshake()  (diagram 3)")
     s.frame("loop", "each 0x80-byte block in plan order", "drv", "radio")

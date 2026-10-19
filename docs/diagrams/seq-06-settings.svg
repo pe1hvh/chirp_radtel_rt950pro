@@ -11,7 +11,7 @@
 <rect x="343.4" y="634.0" width="1245.2" height="238.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
 <path d="M343.4,634.0 h43.6 v12 l-8,8 h-35.6 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
 <text x="350.4" y="648.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">loop</text>
-<text x="395.0" y="648.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">every RadioSetting with an apply callback</text>
+<text x="395.0" y="648.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="normal" font-style="italic">every changed RadioSetting with an apply callback</text>
 <rect x="357.4" y="756.0" width="1217.2" height="102.0" fill="none" stroke="#7A8CA5" stroke-width="1.1" rx="2"/>
 <path d="M357.4,756.0 h36.7 v12 l-8,8 h-28.7 z" fill="#E8EEF7" stroke="#7A8CA5" stroke-width="1.1"/>
 <text x="364.4" y="770.0" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1F2937" text-anchor="start" font-weight="bold">alt</text>

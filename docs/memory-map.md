@@ -12,7 +12,7 @@ source, not yet confirmed here.
 | `0x7800–0x7BBF` | 30 × 32 | Channels 961–990 (part of the row above) | yes | only when one of them changed | HW, see note |
 | `0x7BC0–0x7FFF` | 0x440 | Unused (all `0xFF` on the test radio) | yes | never | HW |
 | `0x8000–0x80FF` | 0x100 | VFO A/B/C | yes | yes | HW |
-| `0x9000–0x90FF` | 0x100 | Function settings | yes | yes | HW |
+| `0x9000–0x90FF` | 0x100 | Function settings (0x60 bytes used; see note on 0x9080) | yes | `0x9000–0x907F` only | HW |
 | `0xA000–0xA1FF` | 0x200 | DTMF | yes | yes | HW |
 | `0xB000–0xB1FF` | 0x200 | Modulation parameters (FM/AM/SSB) | yes | yes | HW |
 | `0xC000–0xC09F` | 10 × 16 | Zone names | yes | yes | HW |
@@ -24,6 +24,15 @@ source, not yet confirmed here.
 older 960-channel firmware) and changed TX behaviour after writing it. The
 driver therefore only writes `0x7800–0x7BFF` when one of channels 961–990 was
 edited, and never writes past `0x7BFF`.
+
+**Note on 0x9080–0x90FF.** The driver uses `0x9000–0x905F`. On the test radio
+`0x9080–0x90FF` was all `0xFF` in one dump and held data in the next, after
+the CPS had written the radio: mostly a shifted copy of `0x9000–0x905F`,
+some `0x00` bytes and `3A 65` (HW). What this area is, and whether the CPS or
+the radio writes it, is not known. The driver reads the whole segment but
+writes only the first block, `0x9000–0x907F`, and leaves `0x9080–0x90FF` to
+the radio; an upload from CHIRP left that area unchanged on the test radio
+(HW).
 
 ## Channel record (32 bytes)
 
@@ -42,11 +51,53 @@ edited, and never writes past `0x7BFF`.
 
 Empty slot: RX frequency is `0xFF`.
 
+## VFO record (32 bytes, at `0x8000 + 32 * n`, n = 0 A, 1 B, 2 C)
+
+Values as stored, with the label the CPS *VFO Mode* screen shows. All rows HW:
+written with the CPS (V1.3.3, firmware 0.29) and read back.
+
+| Offset | Size | Field | Stored values (CPS label) |
+|---|---|---|---|
+| 0 | 8 | Rx Freq | one decimal digit per byte, 10 Hz units |
+| 8 | 2 | Rx QT/DQT | as the channel tone: `00 00` OFF, `nn 00` 1-based DCS index (1–105 N, 106–210 I), else CTCSS × 10, little-endian |
+| 10 | 2 | Tx QT/DQT | as Rx QT/DQT |
+| 13 | 1 | Busy Lockout | bit 0: 0 OFF, 1 ON |
+| 14 | 1 | Offset Dir, Signalling | bits 5-4: 0 None, 1 Plus, 2 Minus; low nibble 0-14 (CPS shows 1-15) |
+| 16 | 1 | Scramble, Tx Power | high nibble 0 OFF, 1-8 (Scramble 1-8); low nibble 0 High, 1 Middle, 2 Low |
+| 17 | 1 | Bandwidth, Encryption, RxModulation | bit 6: 0 Wide, 1 Narrow; bits 5-4: 0 OFF, 1-3 (Encryption 1-3); bit 0: 0 FM, 1 AM; bit 7 learn FHSS (not shown by the CPS; from the driver source, not confirmed) |
+| 18 | 1 | Freq Band | low nibble 0 VHF, 1 UHF. Read-only in the CPS, which derives it from Rx Freq: VHF below 300 MHz, UHF from 300 MHz (boundary measured with the CPS). The driver sets it the same way when Rx Freq is edited |
+| 19 | 1 | Step Freq | low nibble 0-9: 2.5, 5.0, 6.25, 8.33, 10.0, 12.5, 20.0, 25.0, 50.0, 100.0 kHz |
+| 20 | 7 | Offset Freq | one decimal digit per byte, 100 Hz units |
+
+Bytes 12, 15 and 27-31 were `0xFF` on the test radio.
+
+## Modulation parameters (`0xB000`, global fields)
+
+Fields of the CPS *FM/AM/SSB Modulation* screen that are not part of the
+FM, AM or SSB channel tables. `0xFF` means not set. Labels and lists as in
+the CPS. On the radio (HW) the first value of each list was read back, and
+AM = 1 for Modulation Mode; the other values follow the order of the CPS
+list (not confirmed).
+
+| Offset | Field | Stored values (CPS label) |
+|---|---|---|
+| 32 | FM current channel | 0–14 |
+| 33 | Work Mode | 0 VFO Mode, 1 CH Mode |
+| 66 | AM current channel | 0–14 |
+| 67 | Modulation Mode | 0 FM, 1 AM, 2 LSB, 3 USB, 4 CW |
+| 68 | AM Rx Gain | 0 AGC, 1 0dB, 2–36 −1dB to −35dB |
+| 149 | SSB current channel | 0–14 |
+| 150 | SSB Step Freq | 0 1K, 1 5K, 2 10K, 3 100K, 4 500K, 5 1000K |
+| 151 | AM Step Freq | 0 1K, 1 5K, 2 10K, 3 100K |
+| 152 | SSB Rx Gain | as AM Rx Gain |
+
 ## Zone name record (16 bytes, at `0xC000 + 16 * (zone - 1)`)
 
-ASCII name, padded with `0xFF` (or `0x00`). The driver reads up to 16 bytes and
-writes at most 10 characters, keeping the padding byte the radio already uses.
-The maximum length accepted by the radio has not been tested.
+ASCII name, padded with `0xFF` (or `0x00`). The driver reads up to 16 bytes;
+an edited name is written with at most 12 characters, an unedited name as it
+was read, keeping the padding byte the radio already uses.
+The CPS (*Cur Zone Name*) cuts a name to 12 characters; a 12-character name
+was written with the CPS and read back (HW).
 
 ## APRS space (read `0x54`, write `0x58`)
 
