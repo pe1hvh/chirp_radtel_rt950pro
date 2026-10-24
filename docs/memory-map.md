@@ -34,6 +34,14 @@ writes only the first block, `0x9000–0x907F`, and leaves `0x9080–0x90FF` to
 the radio; an upload from CHIRP left that area unchanged on the test radio
 (HW).
 
+**Channel Divide (`0x9026`).** Byte 6 of the second 32-byte part of the
+function settings. `0` = *Zone CH Mode*, `1` = *All CH Mode* (CPS labels)
+(HW: dumps after the CPS wrote each mode differed only in this byte). The
+setting changes only how the radio presents the channels: Zone CH Mode as
+10 zones × 99, All CH Mode as one list 1–990 in which channel *n* is slot
+*n*, so the zones follow each other and empty slots stay empty. The channel
+memory itself is the same in both modes.
+
 ## Channel record (32 bytes)
 
 | Offset | Size | Field |

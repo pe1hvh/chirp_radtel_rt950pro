@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.7 — 2026-10-24
+
+The vendor setting *Channel Divide* (Zone CH Mode / All CH Mode) in CHIRP,
+with the memory view following it.
+
+### Added
+- *Channel Divide* under Function Settings, with the CPS labels and order:
+  Zone CH Mode, All CH Mode. Measured on a real radio (firmware 0.29,
+  CPS V1.3.3): byte `0x9026` is `0` for Zone CH Mode and `1` for All CH
+  Mode; switching the mode in the CPS changed no other byte. A value that
+  is not set (`0xFF`) is kept unless the setting is edited.
+- The memory view follows the setting. Zone CH Mode: ten zone tabs of 99
+  channels, as before. All CH Mode: one list of channels 1–990, the zones
+  one after the other; empty channels stay empty and are not moved up.
+  `0xFF` or an unknown value shows the zones.
+- Changing Channel Divide in CHIRP rebuilds the view at once (CHIRP's
+  volatile settings and `has_dynamic_subdevices`); saving and reopening is
+  not needed. CHIRP versions without `has_dynamic_subdevices` show the new
+  view after the image is reopened.
+- `CHANNEL_DIVIDE_ZONE` and `CHANNEL_DIVIDE_ALL` in the public API.
+- `tests/test_channel_divide.py`.
+
+### Changed
+- `divide_channel` is a list setting with the values 0 and 1 instead of a
+  boolean.
+- `get_features()` sets `has_dynamic_subdevices`; `has_sub_devices` is
+  `False` and `get_sub_devices()` returns no zones in All CH Mode.
+
 ## 0.1.6 — 2026-10-19
 
 Clean-up release: split channels shown as split, a clear error without
