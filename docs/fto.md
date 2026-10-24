@@ -11,7 +11,7 @@ reference in [`memory-map.md`](memory-map.md) and
 | | |
 |---|---|
 | Program | `radtel_rt950pro.py` (single file, 6,957 lines) |
-| Version | 0.1.6 (2026-10-19) |
+| Version | 0.1.7 (2026-10-24) |
 | Radio | Radtel RT-950 Pro, firmware 0.24 and later (tested on 0.29) |
 | Reference CPS | RT-950PRO_CPS v1.3.3 |
 | Licence | MIT; © 2025 Nathan G. Barguss (2E0NBS), © 2026 PE1HVH |
@@ -43,16 +43,17 @@ shown as its own memory tab in CHIRP.
 |---|---|---|---|---|
 | F-01 | Download the complete memory from the radio, with progress per block | ✅ | – | `sync_in` |
 | F-02 | Upload the edited memory to the radio, with progress per block | – | ✅ | `sync_out` |
-| F-03 | 990 channels shown as 10 zone tabs of 99 channels, tab titled with the zone name | ✅ | ✅ | `RT950ProZoneRadio` |
+| F-03 | 990 channels shown as 10 zone tabs of 99 channels, tab titled with the zone name (Zone CH Mode) | ✅ | ✅ | `RT950ProZoneRadio` |
 | F-04 | Channel fields: RX/TX frequency (simplex, ±offset, split when RX and TX are in different bands), name (12 bytes), CTCSS/DCS, power (3 levels), FM/NFM/AM, scan skip, scrambler, encryption | ✅ | ✅ | `_channel_to_memory`, `_apply_memory_to_channel` |
 | F-05 | Zone names (10, max. 12 ASCII characters) | ✅ | ✅ | `_build_zone_group`, `encode_zone_names` |
 | F-06 | VFO A/B/C settings | ✅ | ✅ | `_build_vfo_group` |
-| F-07 | Function settings (26 shown, 57 known) | ✅ | ✅ | `_build_function_group` |
+| F-07 | Function settings (27 shown, 57 known) | ✅ | ✅ | `_build_function_group` |
 | F-08 | DTMF: own ID, PTT ID mode, code groups 1–5 (of 22) | ✅ | ✅ | `_build_dtmf_group` |
 | F-09 | Broadcast/modulation settings and FM/AM/SSB memories | ✅ | ✅ | `_build_modulation_group` |
 | F-10 | APRS settings (11 shown, 39 known), written with command `0x58` | ✅ | ✅ | `_build_aprs_group`, `DEFAULT_SEGMENTS` |
 | F-11 | Save and open CHIRP `.img` files, including images of older driver versions | ✅ | ✅ | `process_mmap`, `save_mmap` |
 | F-12 | Band rules: airband 118–137 MHz forced to AM, wide, TX disabled; 18–64 MHz forced to FM | – | ✅ | `_apply_memory_to_channel` |
+| F-13 | Channel Divide (Zone CH Mode / All CH Mode): setting with the CPS labels; the view follows it (All CH Mode: one list 1–990, empty channels stay in place) and changes at once when the setting is changed | ✅ | ✅ | `_FUNCTION_UI`, `_all_channels_mode`, `get_features`, `get_sub_devices` |
 
 ### A4. Safety rules (functional)
 
@@ -315,7 +316,7 @@ clone.
 |---|---|---|
 | `RT950ProRadio` | `chirp_common.CloneModeRadio` | all behaviour; memories 1–990 |
 | `RT950ProDriver` | `RT950ProRadio` | the registered class (`@directory.register`); empty |
-| `RT950ProZoneRadio` | `RT950ProRadio` | one zone as a sub-device; maps 1–99 to the parent; no own data, does not call CHIRP's constructor |
+| `RT950ProZoneRadio` | `RT950ProRadio` | one zone as a sub-device (Zone CH Mode only); maps 1–99 to the parent; no own data, does not call CHIRP's constructor |
 
 #### B9.2 State of `RT950ProRadio`
 
@@ -355,8 +356,11 @@ Extra per-memory settings (`scrambler`, `encryption`) travel in
 
 #### B9.5 Settings UI
 
-The UI tables `_FUNCTION_UI` (26 keys) and `_APRS_UI` (11 keys) map a key
-to label, type (`bool`, `int`, `enum`, `string`) and range or choices.
+The UI tables `_FUNCTION_UI` (27 keys) and `_APRS_UI` (11 keys) map a key
+to label, type (`bool`, `int`, `enum`, `string`) and range or choices. A
+`_FUNCTION_UI` entry with `'volatile': True` (only Channel Divide) is marked
+volatile by `_create_function_setting`, so CHIRP rebuilds the editor after
+it is changed ([`chirp-interface.md` §7.4](chirp-interface.md#74-channel-divide-zone-tabs-or-one-list)).
 `_build_setting_value()` turns an entry into the matching CHIRP value object;
 `_create_function_setting` / `_create_aprs_setting` attach
 `_apply_function_setting` / `_apply_aprs_setting` as callback. VFO,
@@ -527,6 +531,21 @@ radio with invented answers:
 | `test_with_chirp_the_flag_is_set` | `HAVE_CHIRP` is `True` with CHIRP |
 | `test_find_zone_names_usage_has_a_single_backslash` | the usage text of `find_zone_names.py` continues the shell line |
 
+`tests/test_channel_divide.py` covers Channel Divide (values measured on a
+radio: byte `0x9026`, 0 Zone CH Mode, 1 All CH Mode):
+
+| Test | Checks |
+|---|---|
+| `test_measured_values` | constants 0 and 1, offset `0x9026` |
+| `test_setting_follows_cps_label_and_list` | label *Channel Divide*, CPS choices in CPS order, volatile |
+| `test_stored_value_is_shown` | 0 and 1 are shown as the matching choice |
+| `test_zone_mode_shows_ten_zone_tabs` | Zone CH Mode: ten sub-devices of 99, `has_dynamic_subdevices` |
+| `test_all_mode_shows_one_list_of_990` | All CH Mode: no sub-devices, bounds 1–990 |
+| `test_all_mode_numbering_keeps_empty_channels` | channel *n* is slot *n*; empty channels stay in place |
+| `test_unset_value_shows_zones_and_is_kept` | `0xFF` shows the zones and is kept without an edit |
+| `test_changing_the_setting_switches_view_and_one_byte` | an edit in both directions changes only `0x9026` and switches the view without a reload |
+| `test_all_mode_edit_writes_the_same_slot` | a memory edited in the single list lands in the same zone slot |
+
 `tests/test_check_docstrings.py` checks `tools/check_docstrings.py` and the
 repository itself:
 
@@ -608,7 +627,8 @@ which is shown as OFF (choosing OFF then does not clear it). Known issues
 
 Additional observations from the interface analysis (snapshots not refreshed
 after an upload, comments lost after a zone rename, progress text past
-channel 990, repeated payload builds) are in
+channel 990, repeated payload builds, comments that differ per Channel
+Divide view) are in
 [`chirp-interface.md` §15](chirp-interface.md#15-observations-from-this-analysis).
 
 ### B15. Open items

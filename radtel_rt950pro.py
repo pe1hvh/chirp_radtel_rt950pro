@@ -4,7 +4,7 @@
 # Copyright (c) 2026 PE1HVH                         (zones, zone names, 990
 #                                                   channels, APRS write, fixes)
 #
-# Version 0.1.6 (see CHANGELOG.md)
+# Version 0.1.7 (see CHANGELOG.md)
 #
 # Licensed under the MIT License; see the LICENSE file for the full text.
 #
@@ -34,6 +34,15 @@ Memory layout (confirmed on hardware):
 Zone *z*, channel *k* (both 1-based) is 1-based slot ``(z - 1) * 99 + k``,
 i.e. ``RadioImage.channels[(z - 1) * 99 + k - 1]`` at byte address
 ``((z - 1) * 99 + k - 1) * 32``.
+
+The vendor CPS setting *Channel Divide* (function byte 0x9026, measured on
+hardware: 0 = *Zone CH Mode*, 1 = *All CH Mode*) only changes how the
+radio presents these slots: in Zone CH Mode as 10 zones of 99 channels,
+in All CH Mode as one list of channels 1-990 in which channel *n* is slot
+*n* (the zones placed one after the other; empty channels stay empty and
+are not moved up). The channel memory is the same in both modes. The
+driver follows the setting: CHIRP shows ten zone tabs in Zone CH Mode
+and a single memory list 1-990 in All CH Mode.
 
 The module is organised in layers, from raw bytes up to CHIRP:
 
@@ -96,7 +105,7 @@ try:
 except ImportError:  # pragma: no cover - pydoc/doc builds without pyserial
     serial = None  # pylint: disable=invalid-name
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 """Driver version (semantic versioning); equal to the latest entry in
 ``CHANGELOG.md`` and to the release tag ``v<version>`` on GitHub.
 
@@ -131,6 +140,8 @@ __all__ = [
     # Settings API
     "SettingsError",
     "SettingSpec",
+    "CHANNEL_DIVIDE_ZONE",
+    "CHANNEL_DIVIDE_ALL",
     "function_keys",
     "get_function_value",
     "set_function_value",
@@ -2466,6 +2477,18 @@ class SettingSpec:
 # Function block helpers ----------------------------------------------------
 # ---------------------------------------------------------------------------
 
+CHANNEL_DIVIDE_ZONE = 0
+"""Value of the function setting ``divide_channel`` (byte 0x9026) for the
+CPS choice *Zone CH Mode*: the radio shows 10 zones of 99 channels.
+Measured on hardware (firmware 0.29, CPS v1.3.3)."""
+
+CHANNEL_DIVIDE_ALL = 1
+"""Value of the function setting ``divide_channel`` (byte 0x9026) for the
+CPS choice *All CH Mode*: the radio shows one list of channels 1-990, the
+zones placed one after the other; empty channels stay empty. Measured on
+hardware (firmware 0.29, CPS v1.3.3); switching the mode changed no other
+byte of the clone image."""
+
 _FUNCTION_SPECS: Dict[str, SettingSpec] = {
     "sql": SettingSpec("int", 0, 9),
     "save_mode": SettingSpec("int", 0, 3),
@@ -2502,7 +2525,8 @@ _FUNCTION_SPECS: Dict[str, SettingSpec] = {
     "vox_delay": SettingSpec("int", 0, 9),
     "timer_menu_quit": SettingSpec("int", 0, 9),
     "weather_channel": SettingSpec("enum", choices=tuple(range(0, 10))),
-    "divide_channel": SettingSpec("bool"),
+    "divide_channel": SettingSpec(
+        "enum", choices=(CHANNEL_DIVIDE_ZONE, CHANNEL_DIVIDE_ALL)),
     "subaudio_scan_save": SettingSpec("bool"),
     "vox_switch": SettingSpec("bool"),
     "key_side1_short": SettingSpec("enum", choices=tuple(range(0, 8))),
@@ -4542,6 +4566,13 @@ _POWER_ENUM_TO_CHIRP = {
 _POWER_LABEL_TO_ENUM = {str(level).upper(): enum for enum, level in _POWER_ENUM_TO_CHIRP.items()}
 """Maps an upper-case CHIRP power label (``"HIGH"``) to :class:`PowerLevel`."""
 
+_CHANNEL_DIVIDE_CHOICES = [
+    ('Zone CH Mode', CHANNEL_DIVIDE_ZONE),
+    ('All CH Mode', CHANNEL_DIVIDE_ALL),
+]
+"""Labels (as in the CPS list *Channel Divide*, in its order) and stored
+values of the function setting ``divide_channel``."""
+
 _FUNCTION_UI = {
     'sql': {'label': 'Squelch Level', 'type': 'int', 'min': 0, 'max': 9},
     'save_mode': {'label': 'Battery Save', 'type': 'int', 'min': 0, 'max': 3},
@@ -4613,9 +4644,19 @@ _FUNCTION_UI = {
     },
     'bt_write_switch': {'label': 'Bluetooth Enable', 'type': 'bool'},
     'vox_switch': {'label': 'VOX Enable', 'type': 'bool'},
+    'divide_channel': {
+        'label': 'Channel Divide',
+        'type': 'enum',
+        'choices': _CHANNEL_DIVIDE_CHOICES,
+        'volatile': True,
+    },
 }
 """Function settings shown in CHIRP: key to label, type and range or
 choices. Keys not listed here are kept but not shown.
+
+An entry with ``'volatile': True`` is marked volatile in CHIRP (see
+:func:`_create_function_setting`): changing it makes CHIRP rebuild the
+editor, so the memory tabs follow the new value at once.
 """
 
 _APRS_UI = {
@@ -5497,7 +5538,8 @@ def _create_function_setting(func_settings, key, meta):
         func_settings: Function settings that hold the current value and are
             updated on apply.
         key: Setting name, a key of ``_FUNCTION_UI``.
-        meta: The ``_FUNCTION_UI`` entry for ``key`` (label, type, parameters).
+        meta: The ``_FUNCTION_UI`` entry for ``key`` (label, type, parameters;
+            ``'volatile': True`` marks the setting volatile).
 
     Returns:
         RadioSetting | None: The setting, or ``None`` for an unknown key.
@@ -5510,6 +5552,13 @@ def _create_function_setting(func_settings, key, meta):
     value_obj = _build_setting_value(meta, current)
     rsetting = RadioSetting(f'function.{key}', meta['label'], value_obj)
     rsetting.set_apply_callback(_apply_function_setting, func_settings, key, meta)
+    # A volatile setting makes CHIRP's settings editor ask for a refresh
+    # after it is changed; together with has_dynamic_subdevices CHIRP then
+    # rebuilds the whole editor (memory tabs included) from the image.
+    # The stand-in RadioSetting and old CHIRP versions lack set_volatile.
+    set_volatile = getattr(rsetting, 'set_volatile', None)
+    if meta.get('volatile') and set_volatile is not None:
+        set_volatile(True)
     return rsetting
 
 def _create_aprs_setting(aprs_settings, key, meta):
@@ -5997,9 +6046,11 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     """CHIRP clone-mode driver for the Radtel RT-950 Pro.
 
     Memories 1-990 on this object (memory ``(z - 1) * 99 + k`` is zone *z*,
-    channel *k*) are the driver API; CHIRP's user interface shows only the
-    ten :class:`RT950ProZoneRadio` sub-devices (memories 1-99 each), which
-    map onto them.
+    channel *k*) are the driver API. What CHIRP's user interface shows
+    follows the radio setting *Channel Divide*: in Zone CH Mode the ten
+    :class:`RT950ProZoneRadio` sub-devices (memories 1-99 each), which map
+    onto them; in All CH Mode this object itself, as one list of memories
+    1-990 (memory *n* is radio channel *n*).
 
     Internally all data lives in a :class:`RadioImage`; the CHIRP memory
     map is rebuilt from it whenever CHIRP asks for it.
@@ -6065,6 +6116,12 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
     def get_features(self):  # type: ignore[override]
         """Describe the radio's capabilities to CHIRP.
 
+        ``has_sub_devices`` follows the setting *Channel Divide*
+        (:meth:`_all_channels_mode`): ``True`` in Zone CH Mode (ten zone
+        tabs), ``False`` in All CH Mode (one list, memories 1-990).
+        ``has_dynamic_subdevices`` is set so that CHIRP rebuilds the tabs
+        when that setting is changed.
+
         Returns:
             chirp_common.RadioFeatures: Bands, modes, tones, power levels
             and name rules for this radio.
@@ -6081,8 +6138,18 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         rf.valid_bands = list(VALID_BANDS)
         rf.has_bank = False
         rf.has_bank_names = False
-        # Each zone is shown as its own memory tab (channels 1-99)
-        rf.has_sub_devices = True
+        # Zone CH Mode: each zone is its own memory tab (channels 1-99).
+        # All CH Mode: no sub-devices, so CHIRP shows memories 1-990 of
+        # this object as one list.
+        rf.has_sub_devices = not self._all_channels_mode()
+        # The tabs depend on the setting Channel Divide: CHIRP rebuilds the
+        # editor when that (volatile) setting is changed. Older CHIRP
+        # versions without this feature reject the name; they then show the
+        # new layout only after the image is reopened.
+        try:
+            rf.has_dynamic_subdevices = True
+        except ValueError:
+            pass
         rf.has_settings = True
         rf.has_name = True
         rf.has_ctone = True
@@ -6300,12 +6367,42 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
             'write_aprs': write_aprs,
         }
 
-    def get_sub_devices(self):  # type: ignore[override]
-        """Return one :class:`RT950ProZoneRadio` per zone (memory tabs 1-10).
+    def _all_channels_mode(self) -> bool:
+        """Return whether the image is set to *All CH Mode*.
+
+        Reads the function setting ``divide_channel`` (byte 0x9026) of the
+        loaded image. Only the value ``CHANNEL_DIVIDE_ALL`` (1) counts as
+        All CH Mode; Zone CH Mode (0), a value that is not set (0xFF), an
+        unknown value, a missing function block and no image at all give
+        ``False``, i.e. the zone view.
 
         Returns:
-            list[RT950ProZoneRadio]: Ten sub-devices, zone 1 first.
+            bool: ``True`` for All CH Mode, otherwise ``False``.
         """
+        image = self._image
+        function = getattr(image, 'function', None) if image is not None else None
+        if function is None:
+            return False
+        try:
+            value = get_function_value(function, 'divide_channel')
+        except KeyError:
+            return False
+        return value == CHANNEL_DIVIDE_ALL
+
+    def get_sub_devices(self):  # type: ignore[override]
+        """Return the zone sub-devices for the current *Channel Divide* mode.
+
+        Zone CH Mode: one :class:`RT950ProZoneRadio` per zone (memory tabs
+        1-10). All CH Mode: none, because the radio then has no zones to
+        show; CHIRP uses this object itself (memories 1-990) as the only
+        memory list.
+
+        Returns:
+            list[RT950ProZoneRadio]: Ten sub-devices, zone 1 first, or an
+            empty list in All CH Mode.
+        """
+        if self._all_channels_mode():
+            return []
         return [RT950ProZoneRadio(self, zone) for zone in range(1, ZONE_COUNT + 1)]
 
     def sync_in(self):  # type: ignore[override]
@@ -6866,7 +6963,7 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
 
         Returns:
             chirp_common.RadioFeatures: The parent's features with memory bounds
-            1-99 and no sub-devices or settings.
+            1-99 and no sub-devices (static or dynamic) or settings.
 
         Raises:
             RadioError: If CHIRP is not available.
@@ -6874,6 +6971,8 @@ class RT950ProZoneRadio(RT950ProRadio):  # pylint: disable=too-many-ancestors
         rf = super().get_features()
         rf.memory_bounds = (1, ZONE_SIZE)
         rf.has_sub_devices = False
+        if hasattr(rf, 'has_dynamic_subdevices'):
+            rf.has_dynamic_subdevices = False
         rf.has_settings = False
         return rf
 

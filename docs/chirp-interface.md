@@ -9,8 +9,8 @@ in [`memory-map.md`](memory-map.md) and the wire protocol in
 
 | | |
 |---|---|
-| Driver | `radtel_rt950pro.py`, version 0.1.6 (2026-10-19) |
-| CHIRP reference | `kk7ds/chirp` at commit `0a9be8e` (2026-10-17), wxPython UI (`chirp/wxui`) |
+| Driver | `radtel_rt950pro.py`, version 0.1.7 (2026-10-24) |
+| CHIRP reference | `kk7ds/chirp` at commit `0a9be8e` (2026-10-17), wxPython UI (`chirp/wxui`); the rebuild of the editor after a volatile setting (§7.4) checked at commit `c604141` (2026-10-23) |
 | Radio | Radtel RT-950 Pro, firmware 0.29 (10 zones × 99 channels) |
 
 The CHIRP behaviour described here was read from the CHIRP source at the
@@ -24,13 +24,15 @@ commit above (`chirp/chirp_common.py`, `chirp/directory.py`,
 
 CHIRP treats the RT-950 Pro as a **clone-mode radio**: the whole memory is
 downloaded into an image, edited offline, and uploaded again. The driver
-plugs into CHIRP through one registered class and ten sub-devices:
+plugs into CHIRP through one registered class and, in Zone CH Mode, ten
+sub-devices (in All CH Mode CHIRP uses the registered class itself as the
+only memory list; see §7.4):
 
 | Object | Role towards CHIRP |
 |---|---|
 | `RT950ProDriver` | The class registered with `@directory.register`. CHIRP instantiates it for *Download*, for *Open* of an `.img` file, and keeps it as the radio behind the editor. It adds nothing to `RT950ProRadio`. |
 | `RT950ProRadio` | Shared base class with all behaviour: clone (`sync_in`/`sync_out`), image handling (`process_mmap`, `get_mmap`, `save_mmap`), memories 1–990, settings, sub-devices. Subclass of `chirp_common.CloneModeRadio`. |
-| `RT950ProZoneRadio` | One object per zone (10). CHIRP shows each as a memory tab with memories 1–99. It owns no data: every call is mapped to the parent's memory `(zone − 1) × 99 + n`. |
+| `RT950ProZoneRadio` | One object per zone (10), only in Zone CH Mode. CHIRP shows each as a memory tab with memories 1–99. It owns no data: every call is mapped to the parent's memory `(zone − 1) × 99 + n`. |
 
 All channel and settings data lives in one `RadioImage` object owned by the
 parent (`RT950ProRadio._image`). CHIRP's own memory map (`_mmap`) is rebuilt
@@ -72,7 +74,8 @@ The directory id built by CHIRP (`radio_class_id`) is `Radtel_RT-950_Pro`.
 | Feature | Parent (`RT950ProRadio`) | Zone (`RT950ProZoneRadio`) |
 |---|---|---|
 | `memory_bounds` | `(1, 990)` | `(1, 99)` |
-| `has_sub_devices` | `True` | `False` |
+| `has_sub_devices` | `True` in Zone CH Mode, `False` in All CH Mode (§7.4) | `False` |
+| `has_dynamic_subdevices` | `True` (left out on CHIRP versions without it) | `False` |
 | `has_settings` | `True` | `False` |
 | `has_bank`, `has_bank_names` | `False` | `False` |
 | `has_name`, `valid_name_length` | `True`, 12 | same |
@@ -238,9 +241,9 @@ current layout version.
 
 ### 7.1 Tabs
 
-`ChirpEditorSet` asks the parent for its features. Because
-`has_sub_devices` is set, it calls `get_sub_devices()` and gets ten new
-`RT950ProZoneRadio` objects. Each one:
+`ChirpEditorSet` asks the parent for its features. In Zone CH Mode
+`has_sub_devices` is set, so it calls `get_sub_devices()` and gets ten new
+`RT950ProZoneRadio` objects (All CH Mode: §7.4). Each one:
 
 * stores the parent, its zone number and `_first = (zone − 1) × 99`;
 * sets `VARIANT` from the zone name: `"1 VHF-LOCAL"` for a named zone,
@@ -254,7 +257,8 @@ current layout version.
 
 CHIRP then calls `link_device_metadata(zones)`, which points each zone's
 `_metadata` at `parent._metadata[VARIANT]`, so per-zone data ends up in the
-parent's image metadata when saving. With more than two devices CHIRP uses a
+parent's image metadata when saving. With more than two devices, or with
+`has_dynamic_subdevices` set (always, since 0.1.7), CHIRP uses a
 `wx.Treebook`, which puts the tab list on the right (the optional
 `tools/chirp_list_left.py` patch moves it).
 
@@ -265,7 +269,8 @@ for the parent radio (§10).
 
 | View | Numbers | Mapping |
 |---|---|---|
-| Zone tab *z* | 1–99 | parent memory `(z − 1) × 99 + n` |
+| Zone tab *z* (Zone CH Mode) | 1–99 | parent memory `(z − 1) × 99 + n` |
+| Single list (All CH Mode) | 1–990 | the parent itself: memory *n* is radio channel *n* |
 | Parent (driver API, tests) | 1–990 | slot `number − 1` in `RadioImage.channels` |
 | Radio address | – | `(number − 1) × 32` |
 
@@ -279,7 +284,47 @@ for the parent radio (§10).
 The driver does not store comments. CHIRP's `ExternalMemoryProperties`
 (`get_memory_extra` / `set_memory_extra`) keeps them in the zone's
 `_metadata['mem_extra']`, which is linked to `parent._metadata[VARIANT]`
-and saved in the `.img` metadata. They are never sent to the radio.
+and saved in the `.img` metadata. They are never sent to the radio. In All
+CH Mode CHIRP keeps them in the parent's own `_metadata['mem_extra']`,
+by memory number 1–990 (see §15, item 6).
+
+### 7.4 Channel Divide: zone tabs or one list
+
+The radio setting *Channel Divide* (function byte `0x9026`: `0` Zone CH
+Mode, `1` All CH Mode, measured with the CPS) decides the view. The driver
+reads it from the image in `_all_channels_mode()`; only `1` counts as All
+CH Mode, so `0xFF` (not set) or an unknown value gives the zone view.
+
+| | Zone CH Mode | All CH Mode |
+|---|---|---|
+| `get_features().has_sub_devices` | `True` | `False` |
+| `get_sub_devices()` | ten `RT950ProZoneRadio` | `[]` |
+| What CHIRP shows | ten zone tabs, memories 1–99 | one list *Memories*: the parent, memories 1–990 |
+| Empty channels | empty rows in their zone | empty rows at their place in 1–990; nothing is moved up |
+
+The channel records are the same in both modes; only the numbering in the
+view differs (§7.2).
+
+In the settings the setting is a list *Channel Divide* (Function Settings)
+with the CPS choices *Zone CH Mode* and *All CH Mode*. It is marked
+**volatile** (`RadioSetting.set_volatile(True)`), and `get_features()` sets
+`has_dynamic_subdevices`. When the user changes it, CHIRP
+(`settingsedit.py`, `common.py`):
+
+1. shows *"Changing this setting requires refreshing the settings from the
+   image, which will happen now."*;
+2. calls `set_settings()`, which stores the new value in the image (one
+   byte) — synchronously for a clone-mode radio;
+3. because `has_dynamic_subdevices` is set, posts an `EditorRefresh` event;
+   `_reload_editorset()` in `main.py` builds a new `ChirpEditorSet` for the
+   same radio object and file name, keeps the *modified* flag, and replaces
+   the old one. The new editor set calls `get_features()` and
+   `get_sub_devices()` again, so it shows the other view.
+
+Nothing is saved or reread from disk; unsaved edits stay in the image. On a
+CHIRP version without `has_dynamic_subdevices` the driver leaves the flag
+out; CHIRP then only refreshes the settings tab, and the new view appears
+after the image is saved and reopened.
 
 ---
 
@@ -395,7 +440,7 @@ except Zone Names, which is always present:
 |---|---|---|
 | VFO Profiles | `_build_vfo_group` | per VFO (VFO-A to VFO-C) the fields of the CPS *VFO Mode* screen, with its labels, choices and order: Rx Freq, Rx QT/DQT, Tx QT/DQT, Busy Lockout, Offset Dir, Signalling, Tx Power, Scramble, Bandwidth, Encryption, RxModulation, Freq Band (read-only), Step Freq, Offset Freq |
 | Broadcast/Modulation | `_build_modulation_group` | current FM/AM/SSB channel, work mode, modulation mode, AM/SSB step and RX gain; FM, AM and SSB memories (frequency, name; SSB also bandwidth and beat offset) |
-| Function Settings | `_build_function_group` | the 26 keys of `_FUNCTION_UI` (squelch, VOX, time-out, beeps, display modes, …) |
+| Function Settings | `_build_function_group` | the 27 keys of `_FUNCTION_UI` (squelch, VOX, time-out, beeps, display modes, …, Channel Divide) |
 | APRS Settings | `_build_aprs_group` | the 11 keys of `_APRS_UI` (enable, GPS, callsign, SSID, priority, custom message, …) |
 | DTMF Settings | `_build_dtmf_group` | own ID, PTT ID mode, code groups 1–5 (of 22) |
 | Zone Names | `_build_zone_group` | ten strings, max. 12 ASCII characters |
@@ -440,7 +485,8 @@ power nibble above 2 is read as Low, and a tone with a DCS index the driver
 does not know is shown as OFF.
 
 A renamed zone gets its new tab title only when the sub-devices are created
-again, i.e. after the image is reopened.
+again, i.e. after the image is reopened (or after Channel Divide is changed,
+which rebuilds the editor; §7.4).
 
 ---
 
@@ -596,6 +642,11 @@ Found while tracing the interface; not in the known-issues list of
    bytes until the next save or upload. Edits made in the Browser are never
    parsed back into the `RadioImage` and are overwritten by the next
    `_refresh_mmap()`.
+6. **Memory comments differ per view.** CHIRP keys comments by memory
+   number in the metadata of the device that shows the memory (§7.3): in
+   Zone CH Mode per zone (`_metadata[VARIANT]`, numbers 1–99), in All CH
+   Mode in the parent (numbers 1–990). A comment made in one view is not
+   shown in the other (it remains in the file's metadata).
 
 ---
 

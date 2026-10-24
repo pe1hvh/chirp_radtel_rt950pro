@@ -1,4 +1,4 @@
-# RT-950 Pro — CHIRP-driver: geheugenkaart en status (bijgewerkt 19-10-2026)
+# RT-950 Pro — CHIRP-driver: geheugenkaart en status (bijgewerkt 24-10-2026)
 
 Radio: Radtel RT-950 Pro, firmware 0.29 (10 x 99 zones). Vendor CPS: RT-950PRO_CPS v1.3.3 (20260622).
 Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @254d2cd, MIT), aangepast.
@@ -23,6 +23,7 @@ Basis: experimentele driver van 2E0NBS (NathanBarguss/Chirp_Radtel-RT-950-Pro @2
 | 0x52/0x57 0x0000–0x7BBF | 990 kanalen x 32 bytes = 10 zones x 99 (zone n kanaal k = plek (n-1)*99+k) | ok | ok |
 | 0x52/0x57 0x8000, 0x9000, 0xA000, 0xB000, 0xD000 | VFO, functie, DTMF, modulatie | ok | ok |
 | 0x52/0x57 0xC000–0xC09F | 10 zonenamen x 16 bytes (NoodNetOv op 0xC000 … ZoneTen op 0xC090) | ok | ok |
+| 0x52/0x57 0x9026 | Channel Divide: 0 = Zone CH Mode, 1 = All CH Mode (24-10-2026: twee ruwe dumps nadat de CPS elke stand schreef; alleen deze byte verschilde) | ok | ok (0.1.7) |
 | 0x54/0x58 0x0000 | APRS (128 bytes) | ok | ok met 0x58 (geschreven en teruggelezen); 0x55 geeft GEEN ACK |
 
 0xC800 (zonenamen bij de RT-920) is NIET het adres bij de RT-950 Pro.
@@ -30,7 +31,7 @@ Op de radio van PE1HVH is 0x7800–0x7FFF volledig 0xFF (lege kanalen 961–990)
 DCS-lijst in de driver: 210 codes; index 1–105 = N, 106–210 = I (polariteit "I", niet CHIRP's "R").
 
 ## Uit de CPS-changelog (RT-950PRO_CPS, primaire bron: startmelding CPS v1.3.3)
-- v1.0.5 (20250916): "channel division" toegevoegd; v1.2.0 (20251114): zonenamen bewerken + CHIRP-CSV-export; v1.1.0/1.1.1 (okt 2025): CHIRP-CSV-import.
+- v1.0.5 (20250916): "channel division" toegevoegd (de instelling *Channel Divide*, byte 0x9026; in CHIRP sinds 0.1.7); v1.2.0 (20251114): zonenamen bewerken + CHIRP-CSV-export; v1.1.0/1.1.1 (okt 2025): CHIRP-CSV-import.
 - v1.2.1 (20251129): kanaalgeheugen van 960 (15 zones x 64) naar 990 (10 zones x 99). Zones bestonden dus al vóór 0.24, alleen als 15 x 64.
 - v1.2.2 (20251203): opslagstructuur gewijzigd; CPS-bestanden van vóór 1.2.2 openen niet meer.
 - v1.3.0 (20260209) en v1.3.3 (20260622): nieuwe instellingen (rx interruption, breathing light, NOAA alarm, backlight, power-on delay, VFO scan range; APRS working channel, channel mute, tx data reporting, beacon pop-up time). Liggen vermoedelijk in de functie-/APRS-blokken; offsets onbekend.
