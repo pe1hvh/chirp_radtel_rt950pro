@@ -29,9 +29,21 @@ block is only written when you change an APRS setting.
 
 ## What it looks like in CHIRP
 
-Each zone is its own memory tab, named after the zone, with channels 1–99:
-`Memories (1 VHF-LOCAL)`, `Memories (2 UHF-LOCAL)`, … Zone names are edited
-under **Settings → Zone Names** (max. 12 characters).
+What CHIRP shows follows the radio setting **Channel Divide** (in CHIRP
+under **Settings → Function Settings**; in the vendor CPS above the channel
+list), with the same two choices as the CPS:
+
+- **Zone CH Mode**: each zone is its own memory tab, named after the zone,
+  with channels 1–99: `Memories (1 VHF-LOCAL)`, `Memories (2 UHF-LOCAL)`, …
+- **All CH Mode**: one memory list with channels 1–990. The zones follow
+  each other (channel 100 is zone 2, channel 1) and empty channels stay
+  empty; nothing is moved up.
+
+The channels in the radio are the same in both modes; only the view
+differs. When you change Channel Divide, CHIRP says the settings must be
+refreshed and rebuilds the view at once from the open image; you do not
+need to save or reopen the file. Zone names are edited under
+**Settings → Zone Names** (max. 12 characters) in both modes.
 
 CHIRP places this list of tabs on the right. `tools/chirp_list_left.py` can
 move it to the left, but it modifies your CHIRP installation (see the script).
