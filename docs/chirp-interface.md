@@ -9,7 +9,7 @@ in [`memory-map.md`](memory-map.md) and the wire protocol in
 
 | | |
 |---|---|
-| Driver | `radtel_rt950pro.py`, version 0.1.7 (2026-10-24) |
+| Driver | `radtel_rt950pro.py`, version 0.1.8 (2026-11-15) |
 | CHIRP reference | `kk7ds/chirp` at commit `0a9be8e` (2026-10-17), wxPython UI (`chirp/wxui`); the rebuild of the editor after a volatile setting (§7.4) checked at commit `c604141` (2026-10-23) |
 | Radio | Radtel RT-950 Pro, firmware 0.29 (10 zones × 99 channels) |
 
@@ -89,7 +89,19 @@ The directory id built by CHIRP (`radio_class_id`) is `Radtel_RT-950_Pro`.
 | `valid_power_levels` | Low 1 W, Medium 5 W, High 10 W (nominal) | same |
 | `valid_skips` | `""`, `S` | same |
 | `valid_bands` | 18–64, 70–118, 118–137, 136–174, 174–400, 400–480, 480–580 MHz | same |
+| `has_tuning_step`, `has_nostep_tuning` | `False`, `True`: no tuning step required (0.1.8) | same |
 | `has_comment` | not set (CHIRP default `False`) | same |
+
+The radio stores frequencies in 10 Hz units and has no per-channel tuning
+step. With `has_nostep_tuning` CHIRP's `validate_memory()` skips its two
+step checks, so a frequency such as UK CB 27.60125 MHz (10 kHz raster,
+1.25 kHz offset) can be pasted, edited and imported. CHIRP's airband check
+(108–137 MHz) still applies: there a frequency must be on the 25 kHz or
+8.33 kHz raster, so e.g. 118.020 MHz is refused. The driver's own
+`validate_memory()` adds an error for an RX or TX frequency that is not a
+multiple of 10 Hz, before `set_memory()` would fail on it. Up to 0.1.7 the
+driver set `valid_tuning_steps` to 2.5–25 kHz, which refused such channels
+(issue 12180).
 
 Because `has_comment` is `False`, CHIRP keeps memory comments itself, in the
 image metadata (`mem_extra`), not in the radio (see §7.3).
