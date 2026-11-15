@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.8 — 2026-11-15
+
+Bug fix: channels whose frequency fits none of CHIRP's tuning steps can be
+pasted, edited and imported again (issue 12180).
+
+### Fixed
+- CHIRP refused a channel frequency that none of the steps 2.5, 5, 6.25,
+  8.33, 10, 12.5 and 25 kHz reaches, e.g. UK CB channel 1 at 27.60125 MHz
+  (10 kHz raster with a 1.25 kHz offset), with "Unable to find a supported
+  tuning step". A paste of such a table left gaps. Reading these channels
+  from the radio was not affected. The radio stores frequencies in 10 Hz
+  units and has no per-channel tuning step, so `get_features()` now sets
+  `has_nostep_tuning` and no longer sets `valid_tuning_steps`.
+
+### Added
+- `RT950ProRadio.validate_memory()`: adds an error for an RX or TX
+  frequency that is not a multiple of 10 Hz, so CHIRP reports it in the
+  editor instead of `set_memory()` failing on it.
+- `tests/test_tuning_step.py`.
+
+### Not changed
+- The VFO setting *Step Freq* still offers 2.5–100 kHz (index 0–9). A
+  report mentions extra steps of 10, 50, 100 and 500 Hz on the radio; their
+  stored index is not measured yet. An unknown index is shown as
+  `Unknown (n)` and kept unless the setting is edited.
+
 ## 0.1.7 — 2026-10-24
 
 The vendor setting *Channel Divide* (Zone CH Mode / All CH Mode) in CHIRP,

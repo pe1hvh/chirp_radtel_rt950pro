@@ -10,8 +10,8 @@ reference in [`memory-map.md`](memory-map.md) and
 
 | | |
 |---|---|
-| Program | `radtel_rt950pro.py` (single file, 6,957 lines) |
-| Version | 0.1.7 (2026-10-24) |
+| Program | `radtel_rt950pro.py` (single file, 7,098 lines) |
+| Version | 0.1.8 (2026-11-15) |
 | Radio | Radtel RT-950 Pro, firmware 0.24 and later (tested on 0.29) |
 | Reference CPS | RT-950PRO_CPS v1.3.3 |
 | Licence | MIT; © 2025 Nathan G. Barguss (2E0NBS), © 2026 PE1HVH |
