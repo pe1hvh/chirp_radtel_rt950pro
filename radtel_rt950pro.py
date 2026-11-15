@@ -4,7 +4,7 @@
 # Copyright (c) 2026 PE1HVH                         (zones, zone names, 990
 #                                                   channels, APRS write, fixes)
 #
-# Version 0.1.7 (see CHANGELOG.md)
+# Version 0.1.8 (see CHANGELOG.md)
 #
 # Licensed under the MIT License; see the LICENSE file for the full text.
 #
@@ -105,7 +105,7 @@ try:
 except ImportError:  # pragma: no cover - pydoc/doc builds without pyserial
     serial = None  # pylint: disable=invalid-name
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 """Driver version (semantic versioning); equal to the latest entry in
 ``CHANGELOG.md`` and to the release tag ``v<version>`` on GitHub.
 
@@ -6171,10 +6171,52 @@ class RT950ProRadio(chirp_common.CloneModeRadio):
         # Use CHIRP's standard DCS code list; do not include 0/"000"
         # to avoid invalid DTCS state during CSV export.
         rf.valid_dtcs_codes = list(chirp_common.DTCS_CODES)
-        rf.valid_tuning_steps = [2.5, 5.0, 6.25, 8.33, 10.0, 12.5, 25.0]
+        # The radio stores frequencies in 10 Hz units and has no per-channel
+        # tuning step, so CHIRP must not require one: otherwise it refuses
+        # e.g. UK CB 27.60125 MHz on paste, edit and import. The 10 Hz rule
+        # itself is checked in validate_memory().
+        rf.has_nostep_tuning = True
         rf.valid_characters = chirp_common.CHARSET_ASCII
         rf.valid_name_length = 12
         return rf
+
+    def validate_memory(self, mem):  # type: ignore[override]
+        """Check ``mem`` against CHIRP's rules and the radio's 10 Hz grid.
+
+        Adds to CHIRP's checks (made from :meth:`get_features`) one error if
+        the RX frequency is not a multiple of 10 Hz, and one if ``offset`` is
+        not (for ``+``/``-`` the offset, for ``split`` the TX frequency); with
+        the RX frequency on the 10 Hz grid this equals checking the TX
+        frequency. The radio stores them in 10 Hz units, see
+        :func:`_encode_frequency`; e.g. 27.60125 MHz passes, 145.500005 MHz
+        does not. Empty memories get no extra check.
+
+        Args:
+            mem: The CHIRP ``Memory`` (or ``FrozenMemory``) to check; not
+                modified.
+
+        Returns:
+            list: CHIRP's ``ValidationWarning`` and ``ValidationError``
+            messages; empty when ``mem`` can be stored.
+
+        Raises:
+            RadioError: If CHIRP is not available.
+        """
+        _require_chirp("validate_memory")
+        # CHIRP's CloneModeRadio has validate_memory(); pylint may resolve the
+        # base class to the stand-in, which lacks it (never reached: see above).
+        msgs = super().validate_memory(mem)  # pylint: disable=no-member
+        if mem.empty:
+            return msgs
+        if mem.freq % 10:
+            msgs.append(chirp_common.ValidationError(
+                f"Frequency {chirp_common.format_freq(mem.freq)} MHz is not a "
+                "multiple of 10 Hz"))
+        if mem.duplex in ("+", "-", "split") and mem.offset % 10:
+            msgs.append(chirp_common.ValidationError(
+                f"Offset or TX frequency {chirp_common.format_freq(mem.offset)} "
+                "MHz is not a multiple of 10 Hz"))
+        return msgs
 
     def process_mmap(self):  # type: ignore[override]
         """Parse CHIRP's memory map into a :class:`RadioImage`.
